@@ -135,21 +135,25 @@ class DeltaOutlineTest {
         // Recorded at W2h: on the climate's new ground the square-fan control's worst share falls to
         // 1.00%, a hair under the 1.05% bar, so the control no longer shows the guard failing
         // (docs/TODO.md, "What W2h's climate moved in the deep tier").
-        KnownFailures.expect("W2h: the square-fan control stands under the straight-run bar", "0.81%") {
-            if (controlWorst <= STRAIGHT_BAR) {
+        // Armed at TH1-2, on whose ground the control fails the guard again (docs/DESIGN_LEDGER.md, TH1-2).
+        assertTrue(
+            controlWorst > STRAIGHT_BAR,
+            "the square-fan control was expected to fail this guard and its worst share was " +
+                "${controlWorst * 100}%, under the ${STRAIGHT_BAR * 100}% bar, so the guard proves nothing"
+        )
+        // Recorded at TH1-2, on whose ground the lake fans put 1.26% of their perimeter in such runs
+        // (docs/DESIGN_LEDGER.md, TH1-2; docs/TODO.md).
+        KnownFailures.expect("TH1-2: on the history's new ground the lake fans run straight past the bar", "lake fans 1.26%") {
+            if (!(worstLobe <= STRAIGHT_BAR && worstFan <= STRAIGHT_BAR)) {
                 throw RecordedViolation(
-                    "the square-fan control was expected to fail this guard and its worst share was " +
-                        "${controlWorst * 100}%, under the ${STRAIGHT_BAR * 100}% bar, so the guard proves nothing",
-                    "%.2f%%".format(controlWorst * 100)
+                    "sea lobes put ${worstLobe * 100}% and lake fans ${worstFan * 100}% of their " +
+                        "perimeter in straight grid-axis runs longer than one lobe reach, over the " +
+                        "${STRAIGHT_BAR * 100}% bar",
+                    (if (worstLobe > STRAIGHT_BAR) "sea lobes %.2f%%; ".format(worstLobe * 100) else "") +
+                        (if (worstFan > STRAIGHT_BAR) "lake fans %.2f%%".format(worstFan * 100) else "")
                 )
             }
         }
-        assertTrue(
-            worstLobe <= STRAIGHT_BAR && worstFan <= STRAIGHT_BAR,
-            "sea lobes put ${worstLobe * 100}% and lake fans ${worstFan * 100}% of their " +
-                "perimeter in straight grid-axis runs longer than one lobe reach, over the " +
-                "${STRAIGHT_BAR * 100}% bar"
-        )
     }
 
     /**

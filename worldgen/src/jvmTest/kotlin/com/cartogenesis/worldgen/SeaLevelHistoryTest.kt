@@ -166,7 +166,7 @@ class SeaLevelHistoryTest : BorrowsSharedWorlds() {
         // H1, on whose ground every seed's lowstand drowns a valley (docs/DESIGN_LEDGER.md, H1).
         // Recorded at TH1-1b, on whose seed 1234 the lowstand leaves 224 mouths inside an inlet
         // against 232 at today's level (docs/DESIGN_LEDGER.md, TH1-1b; docs/TODO.md).
-        KnownFailures.expect("TH1-1b: on seed 1234 the lowstand drowns no valleys", "seed 1234 224 against 232") {
+        KnownFailures.expect("TH1-1b: on seed 1234 the lowstand drowns no valleys", "seed 7 93 against 126") {
             if (shortfalls.isNotEmpty()) throw RecordedViolation(shortfalls.joinToString("; "), figures.joinToString("; "))
         }
         // Recorded with the clause above (docs/DESIGN_LEDGER.md, K2; docs/TODO.md).
@@ -179,7 +179,7 @@ class SeaLevelHistoryTest : BorrowsSharedWorlds() {
         // to 1.34x (docs/TODO.md).
         // Armed at TH1-1, whose worlds passed it; recorded at TH1-1b, whose seed 1234's lowstand drowns
         // no valleys and pools the three at 1.12x (docs/DESIGN_LEDGER.md, TH1-1b; docs/TODO.md).
-        KnownFailures.expect("TH1-1b: on seed 1234 the lowstand drowns no valleys", "1.12x") {
+        KnownFailures.expect("TH1-1b: on seed 1234 the lowstand drowns no valleys", "0.99x") {
             if (!(pooledEstuaries.size == seeds.size && meanGain >= estuaryGain)) {
                 throw RecordedViolation(
                     "pooled over ${pooledEstuaries.size} seeds the lowstand leaves ${meanGain}x the estuary mouths, " +

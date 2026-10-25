@@ -173,16 +173,14 @@ class DeltaMouthTest : BorrowsSharedWorlds() {
         // two things the sloping lobe exists to fix and which it does fix.
         // Recorded at TH1-1b, on whose worlds the old slab lies flat on three seeds of the four
         // (docs/DESIGN_LEDGER.md, TH1-1b; docs/TODO.md).
-        KnownFailures.expect("TH1-1b: the old slab lobe no longer lies flat on every seed", "441 stranded, flat on 3 of 4") {
-            if (!(controlStranded > 0 && controlFlat == seeds.size)) {
-                throw RecordedViolation(
-                    "the old lobe was expected to strand rivers ($controlStranded) and to lie flat on " +
-                        "every seed ($controlFlat of ${seeds.size}), and did not, so this guard proves " +
-                        "nothing ($controlPockets seeds also had the slab stranding a mouth in a pocket)",
-                    "$controlStranded stranded, flat on $controlFlat of ${seeds.size}"
-                )
-            }
-        }
+        // Armed at TH1-2, on whose worlds the old slab lies flat on every seed again
+        // (docs/DESIGN_LEDGER.md, TH1-2).
+        assertTrue(
+            controlStranded > 0 && controlFlat == seeds.size,
+            "the old lobe was expected to strand rivers ($controlStranded) and to lie flat on " +
+                "every seed ($controlFlat of ${seeds.size}), and did not, so this guard proves " +
+                "nothing ($controlPockets seeds also had the slab stranding a mouth in a pocket)"
+        )
     }
 
     /**

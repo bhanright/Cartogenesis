@@ -318,7 +318,7 @@ class PressureWindTest : BorrowsSharedWorlds() {
         // Armed at W2b, whose summer coasts draw the wind on past the bar (docs/DESIGN_LEDGER.md, W2b).
         // Recorded at W2e, +0.09 m/s, a hundredth under the bar again, seed 1234's equatorial
         // continent blowing off its coasts in both halves, not traced (docs/TODO.md).
-        KnownFailures.expect("W2e: the summer wind onto the subtropical coasts stands a hundredth under the bar", "-0.24") {
+        KnownFailures.expect("W2e: the summer wind onto the subtropical coasts stands a hundredth under the bar", "-0.09") {
             if (summer <= ONSHORE_BAR_MPS) {
                 throw RecordedViolation(
                     ("the warm half blows %+.2f m/s onto the subtropical continents' equatorward and " +

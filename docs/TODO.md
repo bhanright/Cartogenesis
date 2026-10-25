@@ -104,6 +104,29 @@
   north-south rift; armed there, the steppe's band, the sky's contrast, the slope floor and Mars's
   water. In `:desktop`: two pixels of river ink on water with no land beside them on seed 298405
   (`RiverWidthTest`, as TH1-1 recorded on 1234). 2026-10-24, TH1-2.
+- **What TH1-2 moved in the deep tier (recorded).** On the history's new worlds, each a known
+  failure against its finding: the lake fans put 1.26% of their perimeter in straight grid-axis
+  runs against the 1.05% bar (`DeltaOutlineTest`); one ice-made lake is a straight one-cell line on
+  seeds 718106 and 7 at 1,024 rows, a rule 13 finding not traced (`GlaciationCombTest`); 0.799 of
+  the drowned continental crust lies within 800 km of the edge against 0.80 (`GroundTextureTest`);
+  the subtropical highs stand 10.12 hPa over the mean pooled against Earth's 11.0 to 12.7
+  (`MeanCirculationEarthTest`); the deserts end along a row at 408 km pooled and the 250 mm
+  isohyet at 590 km against main's 311 and 487 (`RainGeometryTest`). `BoundaryPairTest`'s clause
+  that an Andean margin and a collision plateau are different shapes, recorded since TH1-1, now
+  reads its pooled ratio as not a number: the belts are no longer stamped on the boundaries, so
+  the profile it measures from the boundary has no Andean belt to find; it wants restating on the
+  history's belts (a thrust belt 450 to 750 km behind its trench against a plateau). The stamped
+  collisional and Andean uplift rates (`TectonicsConfig.collisionUpliftMmPerYear`,
+  `andeanUpliftMmPerYear`) no longer reach the world, those belts' rock rising at the crust's
+  thickening rate: `IncrementalReuseTest` moves the island arcs' rate instead, and
+  `IsostasyTest`'s collision-rate derivation reads a setting nothing uses; both settings want
+  retiring with that derivation. Armed, their worlds passing: the dissection pin's flat-rain
+  control, the old delta slab, the square-fan control, the comb of ice bars, the uniform-crust
+  control's drowning, the ice cap's bed and moat, seed 42's foreland moat, the subtropical ridge's
+  summer move, the cold dry interior's ice, the sheet's edge round the pole, the sheet's flow down
+  its own surface, seed 1's dry basin, and both of the Caspian clauses. Four classes ran out of
+  heap together and passed alone (`GlaciationLatticeTest`, `IceSheetTest`, `LakeWaterBalanceTest`,
+  `RealmIdRangeTest`), as at TH1-1b. 2026-10-25, TH1-2.
 - **`:ui`'s tier fails as it did on TH1-1b (measured at TH1-2).** Eleven of its 160 tests fail on
   both trees alike: `BugReportTest` expects the ocean coverage at 62% where the default has been 71%
   since TH1-1, and nine cases that generate worlds run out of the test task's heap in

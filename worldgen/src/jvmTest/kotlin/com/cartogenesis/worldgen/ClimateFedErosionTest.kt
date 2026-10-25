@@ -455,16 +455,16 @@ class ClimateFedErosionTest {
         // well as its flat-rain control (docs/DESIGN_LEDGER.md, A1-6a).
         // Armed at TH1-1, whose worlds passed it. Recorded at TH1-1b, on whose worlds seed 42's
         // flat-rain control ranks against the rain (docs/DESIGN_LEDGER.md, TH1-1b; docs/TODO.md).
-        KnownFailures.expect("B-I2: the dissection pin was taken off the uplift path", "; seed 42's flat-rain control at -0.048") {
+        // Armed at TH1-2, whose worlds pass it (docs/DESIGN_LEDGER.md, TH1-2).
+        run {
             if (underThePin.isNotEmpty() || uncontrolled.isNotEmpty()) {
                 val found = underThePin.joinToString { (seed, fed) -> String.format(Locale.ROOT, "seed %d at %.3f", seed, fed) } +
                     "; " + uncontrolled.joinToString { (seed, flat) ->
                         String.format(Locale.ROOT, "seed %d's flat-rain control at %.3f", seed, flat)
                     }
-                throw RecordedViolation(
+                throw AssertionError(
                     "rainfall and incision rank together at only $found, under the pin of $DISSECTION_CORRELATION " +
-                        "or against a control that does not correlate at all",
-                    found
+                        "or against a control that does not correlate at all"
                 )
             }
         }

@@ -33,7 +33,7 @@ class CirculationRescueTest : BorrowsSharedWorlds() {
         println("RESCUE seed $SEED at ${SharedWorlds.COARSE_ROWS} rows: ${flow.cycles} cycles and iterations to ${flow.relativeResidual}")
         // Recorded at TH1-1b: on its worlds the cycles alone solve this control in 14, so it no longer
         // stalls and the rescue is not exercised here (docs/DESIGN_LEDGER.md, TH1-1b; docs/TODO.md).
-        KnownFailures.expect("TH1-1b: the control ocean no longer stalls the cycles, so the rescue is not exercised", "14") {
+        KnownFailures.expect("TH1-1b: the control ocean no longer stalls the cycles, so the rescue is not exercised", "12") {
             if (flow.cycles <= OceanCirculation.MOST_CYCLES) {
                 throw RecordedViolation(
                     "the cycles alone solved this world in ${flow.cycles}, so it no longer shows the stall the rescue is for",

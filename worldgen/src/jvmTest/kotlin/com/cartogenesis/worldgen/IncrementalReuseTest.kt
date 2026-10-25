@@ -85,8 +85,10 @@ class IncrementalReuseTest {
                 isostasy = base.isostasy.copy(elasticThicknessKm = base.isostasy.elasticThicknessKm * 2f)
             ),
             "isostasyOff" to base.copy(isostasy = base.isostasy.copy(enabled = false)),
+            // The island arcs' rate, since the collisional and Andean belts' rock rises at the crust's
+            // own thickening rate (TH1-2) and their stamped rates no longer reach the world.
             "uplift" to base.copy(
-                tectonics = base.tectonics.copy(collisionUpliftMmPerYear = 0f)
+                tectonics = base.tectonics.copy(islandArcUpliftMmPerYear = 0f)
             ),
             // The tectonic history's knobs live on the same section, so the tectonics guard already
             // covers them — but only if a case actually moves one, and the history is the largest

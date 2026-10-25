@@ -748,7 +748,7 @@ class IsostasyTest : BorrowsSharedWorlds() {
         // denudation this is derived from (docs/DESIGN_LEDGER.md, Fix 3 and Fix 3b). Recorded on
         // H1's ground under the coupled climate, whose rain takes more off the belts: the setting is
         // the generator's to re-derive, not this merge's (docs/DESIGN_LEDGER.md, M1; docs/TODO.md).
-        KnownFailures.expect("M1: the collision rate trails this model's denudation under the coupled climate", "0.847 implied") {
+        KnownFailures.expect("M1: the collision rate trails this model's denudation under the coupled climate", "0.855 implied") {
             if (abs(implied - tectonics.collisionUpliftMmPerYear) > UPLIFT_RATE_TOLERANCE_MM_PER_YEAR) {
                 throw RecordedViolation(
                     "the collision uplift rate is not Earth's surface uplift plus what this model's own rivers take off a " +
@@ -874,20 +874,19 @@ class IsostasyTest : BorrowsSharedWorlds() {
         // Re-recorded at L1. Armed again at H1, where seed 42's collision is another collision (more
         // of its plates are continents) and its moat lies at 750-938 km, 1,140 m under the belt,
         // with the ground rising 10 m beyond it (docs/DESIGN_LEDGER.md, H1).
-        // Recorded at TH1-1: on the history's seed 42 the collision is another collision, its moat at
-        // the window's last bin, 1,125 to 1,313 km, with no ground beyond it to rise, as before H1
-        // (docs/DESIGN_LEDGER.md, TH1-1; docs/TODO.md).
-        KnownFailures.expect("TH1-1: on the history's seed 42 the foreland's moat lies at the window's edge", "moat at 1125-1313 km") {
+        // Recorded at TH1-1: on the history's seed 42 the collision was another collision, its moat
+        // at the window's last bin, with no ground beyond it to rise; armed at TH1-2, whose seed 42's
+        // foreland rises beyond its moat (docs/DESIGN_LEDGER.md, TH1-2).
+        run {
             if (beyondTheMoat - inTheForeland < MIN_FOREBULGE_METRES) {
-                throw RecordedViolation(
+                throw AssertionError(
                     "the ground beyond the moat does not come back up, so what was measured is a slope" +
                         " away from the belt and not a trough — and a trough with a rise beyond it is the" +
                         " one thing no uniform bend can make: " + String.format(
                             java.util.Locale.ROOT, "moat at %.0f-%.0f km, %.0f m under the belt, rising %.0f m beyond it",
                             moatBin * FLEXURE_BIN_KM, (moatBin + 1) * FLEXURE_BIN_KM,
                             overTheBelt - inTheForeland, beyondTheMoat - inTheForeland
-                        ),
-                    String.format(java.util.Locale.ROOT, "moat at %.0f-%.0f km", moatBin * FLEXURE_BIN_KM, (moatBin + 1) * FLEXURE_BIN_KM)
+                        )
                 )
             }
         }
@@ -1008,19 +1007,17 @@ class IsostasyTest : BorrowsSharedWorlds() {
         // Over Airy's own share from Fix 2 to Fix 3 (0.279 against 0.278), inside it at Fix 3, over
         // it on the implicit update before the uplift was re-derived (0.284), and inside it again
         // with the uplift re-derived (docs/DESIGN_LEDGER.md, Fix 2 and Fix 3b).
-        // Recorded at TH1-1b: the cap's bed sinks a hair past Airy's own share, 0.278 printed against
-        // 0.278 (docs/DESIGN_LEDGER.md, TH1-1b; docs/TODO.md).
-        KnownFailures.expect("Fix 2: the bed under the cap sinks a hair past Airy's own share", "0.278") {
-            if (realised !in (airyRatio * CAP_SHARE_OF_AIRY_FLOOR)..airyRatio.toDouble()) {
-                throw RecordedViolation(
-                    "the bed under the cap sank ${"%.0f".format(deepestUnderIce)} m under" +
-                        " ${"%.0f".format(thicknessThere)} m of ice, a ratio of ${"%.3f".format(realised)}," +
-                        " which is not between ${"%.3f".format(airyRatio * CAP_SHARE_OF_AIRY_FLOOR)} and" +
-                        " ${"%.3f".format(airyRatio)} - Airy's `iceDensity / mantleDensity` and the share" +
-                        " of it a plate of this stiffness lets through",
-                    "%.3f".format(java.util.Locale.ROOT, realised)
-                )
-            }
+        // Recorded at TH1-1b: the cap's bed sank a hair past Airy's own share, 0.278 printed against
+        // 0.278; armed at TH1-2, whose cap's bed stands inside it (docs/DESIGN_LEDGER.md, TH1-2).
+        run {
+            assertTrue(
+                "the bed under the cap sank ${"%.0f".format(deepestUnderIce)} m under" +
+                    " ${"%.0f".format(thicknessThere)} m of ice, a ratio of ${"%.3f".format(realised)}," +
+                    " which is not between ${"%.3f".format(airyRatio * CAP_SHARE_OF_AIRY_FLOOR)} and" +
+                    " ${"%.3f".format(airyRatio)} - Airy's `iceDensity / mantleDensity` and the share" +
+                    " of it a plate of this stiffness lets through",
+                realised in (airyRatio * CAP_SHARE_OF_AIRY_FLOOR)..airyRatio.toDouble()
+            )
         }
         // Recorded at K2 at 69 m of 433, and armed again at H1 at 62 m of 239: the moat is about as
         // deep as it was, and what moved is seed 7's thickest ice, 860 m against 1,558, so this
@@ -1028,16 +1025,13 @@ class IsostasyTest : BorrowsSharedWorlds() {
         // Recorded at TH1-1: on the history's seed 7 the thickest ice is 5,065 m and floats out at
         // 1,408 m, and its moat is 226 m, under the fifth (docs/DESIGN_LEDGER.md, TH1-1; docs/TODO.md);
         // at TH1-1b 173 m of the 1,096 its thickest ice floats out at.
-        KnownFailures.expect("TH1-1: on the history's seed 7 the ice's moat is shallower than a fifth of its float", "173 of 1096") {
-            if (deepestMoat !in (thickest * airyRatio * MOAT_SHARE_OF_AIRY_FLOOR)..(thickest * airyRatio).toDouble()) {
-                throw RecordedViolation(
-                    "the moat round the ice is ${"%.0f".format(deepestMoat)} m deep, which is not between" +
-                        " a fifth and the whole of the ${"%.0f".format(thickest * airyRatio)} m the" +
-                        " thickest ice on this world floats out at",
-                    "${"%.0f".format(deepestMoat)} of ${"%.0f".format(thickest * airyRatio)}"
-                )
-            }
-        }
+        // Armed at TH1-2, whose worlds pass it (docs/DESIGN_LEDGER.md, TH1-2).
+        assertTrue(
+            "the moat round the ice is ${"%.0f".format(deepestMoat)} m deep, which is not between" +
+                " a fifth and the whole of the ${"%.0f".format(thickest * airyRatio)} m the" +
+                " thickest ice on this world floats out at",
+            deepestMoat in (thickest * airyRatio * MOAT_SHARE_OF_AIRY_FLOOR)..(thickest * airyRatio).toDouble()
+        )
     }
 
     /**

@@ -166,7 +166,7 @@ class LocalCirculationEarthTest : BorrowsSharedWorlds() {
         // but the half's rain before the blur is the ground's climb cell by cell, and the
         // continent's rows change by x1.05 to x1.09 in their median over this span, Earth's whole
         // gradient across a row, and by x1.2 to x1.5 at their largest (docs/TODO.md).
-        KnownFailures.expect("F1: the half's rain before the blur steps along a row by its own grain", "42 July x1.29 at 25.8; 42 January x1.28 at -20.1; 969495 July x1.18 at 3.3; 969495 January x1.15 at -19.2; 7 July x1.40 at 19.4; 7 January x1.13 at -12.9") {
+        KnownFailures.expect("F1: the half's rain before the blur steps along a row by its own grain", "42 July x1.14 at 19.1; 42 January x1.53 at -8.3; 969495 July x1.13 at 21.2; 969495 January x1.15 at -18.9; 7 July x1.15 at 9.9; 7 January x1.29 at -13.3") {
             if (over.isNotEmpty()) {
                 throw RecordedViolation(
                     "the equatorial continent's rain steps along a row by more than Earth's steepest gradient allows: " + over.joinToString("; "),
@@ -203,7 +203,7 @@ class LocalCirculationEarthTest : BorrowsSharedWorlds() {
         }
         // Recorded at W2c, whose warmer tropical sea and cloud left seed 7's line over land at 16.1 N
         // where W2b's stood near 17.6, the pooled shift a hair under Earth's (docs/TODO.md).
-        KnownFailures.expect("W2c: July's convergence line stands a hair under Earth's distance inland", "4.0") {
+        KnownFailures.expect("W2c: July's convergence line stands a hair under Earth's distance inland", "3.1") {
             if (shifts.average() < LEAST_INLAND_SHIFT_DEGREES) {
                 throw RecordedViolation(
                     "July's convergence line over land stands %.1f degrees poleward of the sea's pooled, under Earth's %.1f"
@@ -290,7 +290,7 @@ class LocalCirculationEarthTest : BorrowsSharedWorlds() {
         }
         // Recorded at TH1-1b, on whose worlds the control draws no seam past the bar (docs/DESIGN_LEDGER.md,
         // TH1-1b; docs/TODO.md).
-        KnownFailures.expect("TH1-1b: the seam's control no longer draws a seam", "235") {
+        KnownFailures.expect("TH1-1b: the seam's control no longer draws a seam", "567") {
             if (controlLongest <= bar) {
                 throw RecordedViolation(
                     "the control draws no seam longer than %.0f km, so the guard shows nothing: %.0f".format(bar, controlLongest),

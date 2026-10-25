@@ -499,14 +499,8 @@ class SnowBalanceTest : BorrowsSharedWorlds() {
         // whose rain from the solved vertical motion leaves the cold dry interior under 2% ice.
         // Recorded at W2e, whose free troposphere carries more water over the cold interiors: 2.6%
         // (docs/DESIGN_LEDGER.md, W2e; docs/TODO.md).
-        KnownFailures.expect("W2e: a little more of the cold dry interior stays ice sheet", "4.1%") {
-            if (shareOn >= 2.0) {
-                throw RecordedViolation(
-                    "${"%.1f".format(shareOn)}% of the cold dry interior is still ice sheet",
-                    String.format(java.util.Locale.ROOT, "%.1f%%", shareOn)
-                )
-            }
-        }
+        // Armed at TH1-2, whose cold dry interior holds under 2% ice (docs/DESIGN_LEDGER.md, TH1-2).
+        assertTrue("${"%.1f".format(shareOn)}% of the cold dry interior is still ice sheet", shareOn < 2.0)
     }
 
     /**
@@ -648,7 +642,7 @@ class SnowBalanceTest : BorrowsSharedWorlds() {
         // at W2c, under whose warmer sea and cooler high latitudes seed 7's band falls under its
         // least as seed 99's had (docs/TODO.md). Armed at W2h, on whose ground enough seeds carry one.
         // Recorded at TH1-1, on whose worlds two seeds carry a marginal band (docs/DESIGN_LEDGER.md, TH1-1; docs/TODO.md).
-        KnownFailures.expect("TH1-1: on the history's worlds two seeds carry a marginal band", "1") {
+        KnownFailures.expect("TH1-1: on the history's worlds two seeds carry a marginal band", "2") {
             if (seeds.size - unmeasured.size < LEAST_SEEDS_WITH_A_MARGIN) {
                 throw RecordedViolation(
                     "only ${seeds.size - unmeasured.size} seeds carry a marginal band, under $LEAST_SEEDS_WITH_A_MARGIN",

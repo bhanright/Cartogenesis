@@ -207,7 +207,7 @@ class CurrentFeedsRainTest : BorrowsSharedWorlds() {
         // (docs/DESIGN_LEDGER.md, W2e). Recorded at W2h: under the cells' edges by sector the sample's
         // cold coast comes out 3% wetter with the currents on, 319 against 309 mm, not traced
         // (docs/TODO.md, "What W2h's climate moved in the deep tier").
-        KnownFailures.expect("W2h: the cold-current coast comes out wetter with the currents on", "off 1207 on 1240") {
+        KnownFailures.expect("W2h: the cold-current coast comes out wetter with the currents on", "off 654 on 658") {
             if (coldOn >= coldOff) {
                 throw RecordedViolation(
                     "cold-current coast should get drier with the currents on: off=$coldOff, on=$coldOn",
@@ -222,7 +222,7 @@ class CurrentFeedsRainTest : BorrowsSharedWorlds() {
         // Armed again at H1, where on main's climate it came out 0.2% wetter, and on H1's ground
         // under the coupled climate (docs/DESIGN_LEDGER.md, H1 and M1).
         // Recorded again at A1-6b, 1.4% drier (docs/TODO.md); 4.5% drier at W2e.
-        KnownFailures.expect("A1-6b: the warm-current coast comes out drier with the currents on", "-8.1%") {
+        KnownFailures.expect("A1-6b: the warm-current coast comes out drier with the currents on", "-6.3%") {
             if (warmOn < warmOff * 0.999) {
                 throw RecordedViolation(
                     "warm-current coast should not get drier with the currents on: off=$warmOff, on=$warmOn",

@@ -251,7 +251,7 @@ class OutletIncisionTest : BorrowsSharedWorlds() {
         val pooledDepth = depthShares.average()
         // Recorded since Fix 3b: see [NOTCH_SHORT_ON_THE_LAWS_TERRAIN].
         // Re-recorded on square cells at Q2 (docs/DESIGN_LEDGER.md, Q2). Re-recorded at L1, whose rifts are Earth's half-grabens and the same at every grid (docs/DESIGN_LEDGER.md, L1).
-        KnownFailures.expect(NOTCH_SHORT_ON_THE_LAWS_TERRAIN, "97.9% as deep as the control's") {
+        KnownFailures.expect(NOTCH_SHORT_ON_THE_LAWS_TERRAIN, "79.3% as deep as the control's") {
             if (pooledDepth >= 0.5) {
                 throw RecordedViolation(
                     "the fill still stands ${"%.1f".format(pooledDepth * 100)}% as deep over the land as the " +
@@ -485,11 +485,8 @@ class OutletIncisionTest : BorrowsSharedWorlds() {
         // Recorded at W2e, whose interiors rain where they were desert and fill their closed basins:
         // seed 718106's largest lake stands at 5.76 times the Caspian's share after the notch
         // (docs/DESIGN_LEDGER.md, W2e; docs/TODO.md).
-        KnownFailures.expect("W2e: the wetter interiors fill a basin past the Caspian's share", "seed 1234's largest lake 2.13x the Caspian") {
-            if (overCaspian.isNotEmpty()) {
-                throw RecordedViolation("a lake is over the Caspian's share of the map: ${overCaspian.joinToString("; ")}", overCaspian.joinToString("; "))
-            }
-        }
+        // Armed at TH1-2, whose worlds keep every lake under the Caspian's share (docs/DESIGN_LEDGER.md, TH1-2).
+        assertTrue(overCaspian.isEmpty(), "a lake is over the Caspian's share of the map: ${overCaspian.joinToString("; ")}")
         // Recorded at C1b: the land rains more than Earth's and returns less of it, so two seeds
         // start with a lake over the Caspian's share again, and the notch takes their worlds' water
         // to 0.68 and 0.76 of the control rather than under half (docs/DESIGN_LEDGER.md, C1b;
@@ -507,14 +504,8 @@ class OutletIncisionTest : BorrowsSharedWorlds() {
         // Armed at TH1-1, whose worlds passed it; recorded again at TH1-1b, whose seed 1234 starts with
         // a lake the notch leaves holding two thirds of its world's water (docs/DESIGN_LEDGER.md,
         // TH1-1b; docs/TODO.md).
-        KnownFailures.expect("W2e: an over-large lake does not fall with its notch", "seed 1234's water 1.5008% to 0.9932%") {
-            if (notHalved.isNotEmpty()) {
-                throw RecordedViolation(
-                    "an over-large lake did not fall, or its world kept more than half its water: ${notHalved.joinToString("; ")}",
-                    notHalved.joinToString("; ")
-                )
-            }
-        }
+        // Armed at TH1-2, whose worlds pass it (docs/DESIGN_LEDGER.md, TH1-2).
+        assertTrue(notHalved.isEmpty(), "an over-large lake did not fall, or its world kept more than half its water: ${notHalved.joinToString("; ")}")
         // Recorded at L1, where only seed 718106 started over-large; armed again at its review round,
         // whose rift joins are relay ramps: seed 43's largest lake starts at 0.392% of its land, over
         // the Caspian's 0.249%, beside 718106's 0.975% (docs/DESIGN_LEDGER.md, L1).
@@ -532,7 +523,7 @@ class OutletIncisionTest : BorrowsSharedWorlds() {
         // at W2b, under whose drier land one seed does (docs/TODO.md), and at W2c none. Armed at W2e,
         // under whose wetter interiors seeds 718106 and 7 do (docs/DESIGN_LEDGER.md, W2e). Recorded
         // at TH1-1, on whose worlds none does (docs/DESIGN_LEDGER.md, TH1-1; docs/TODO.md).
-        KnownFailures.expect("TH1-1: on the history's worlds no seed starts with a lake over the Caspian's share", "1 of 6") {
+        KnownFailures.expect("TH1-1: on the history's worlds no seed starts with a lake over the Caspian's share", "0 of 6") {
             if (overLarge < 2) {
                 throw RecordedViolation(
                     "only $overLarge of ${seeds.size} seeds had an over-large lake to begin with, so this guard proves little",

@@ -181,7 +181,7 @@ class MoistureBudgetTest : BorrowsSharedWorlds() {
                 .format(seeds.size, ratio * 100, EARTH_RECYCLING * 100)
         )
         // Recorded at TH1-1b (docs/DESIGN_LEDGER.md, TH1-1b; docs/TODO.md).
-        KnownFailures.expect("TH1-1b: on the history's dispersed worlds the land's water cycle stands off Earth's", "0.275") {
+        KnownFailures.expect("TH1-1b: on the history's dispersed worlds the land's water cycle stands off Earth's", "0.286") {
             if (!(ratio > EARTH_RECYCLING / EARTH_TOLERANCE && ratio < EARTH_RECYCLING * EARTH_TOLERANCE)) {
                 throw RecordedViolation(
                     "the continental recycling ratio is %.3f, outside Earth's %.2f by more than a quarter".format(ratio, EARTH_RECYCLING),

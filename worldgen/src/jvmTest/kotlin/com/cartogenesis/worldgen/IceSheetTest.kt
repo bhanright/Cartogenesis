@@ -247,14 +247,8 @@ class IceSheetTest : BorrowsSharedWorlds() {
         // holds over none (docs/DESIGN_LEDGER.md, W2d). Recorded at TH1-1b, whose seed 42 carries a
         // sheet round the south pole that flows outward a hair over the bar's angle, 68.5% at 67.9
         // degrees off radial (docs/DESIGN_LEDGER.md, TH1-1b; docs/TODO.md).
-        KnownFailures.expect("A1-4: seed 42's sheet flows outward a hair under the bar", "seed 42: 68.5% of the ice near the dome flows outward at a mean 67.9 degrees off radial") {
-            if (failures.isNotEmpty()) {
-                throw RecordedViolation(
-                    "the sheet is not flowing down its own surface: " + failures.joinToString("; "),
-                    failures.joinToString("; ") { it.substringBefore(", where") }
-                )
-            }
-        }
+        // Armed at TH1-2, whose worlds pass it (docs/DESIGN_LEDGER.md, TH1-2).
+        assertTrue("the sheet is not flowing down its own surface: " + failures.joinToString("; "), failures.isEmpty())
     }
 
     /**
@@ -517,11 +511,8 @@ class IceSheetTest : BorrowsSharedWorlds() {
         // (docs/DESIGN_LEDGER.md, Fix 3b).
         // Recorded at TH1-1b, whose seed 42 carries land under the south pole's ice: the sheet's
         // edge there runs round the pole along a row (docs/DESIGN_LEDGER.md, TH1-1b; docs/TODO.md).
-        KnownFailures.expect("TH1-1b: seed 42's sheet runs round the south pole along a row", "seed 42: the sheet's edge runs 47 cells straight along bearing 0, against 45.6 allowed") {
-            if (failures.isNotEmpty()) {
-                throw RecordedViolation("the sheet mask's edge is ruled along a grid bearing:\n" + failures.joinToString("\n"), failures.joinToString("; "))
-            }
-        }
+        // Armed at TH1-2, whose worlds pass it (docs/DESIGN_LEDGER.md, TH1-2).
+        assertTrue("the sheet mask's edge is ruled along a grid bearing:\n" + failures.joinToString("\n"), failures.isEmpty())
     }
 
     /** One sheet's outline, as the edge clause reads it. */

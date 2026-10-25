@@ -45,7 +45,10 @@ class CrustMapParity private constructor(private val inputs: CrustMapInputs, pri
         val floorAgeBarMyr: Double,
         val crustAgeWorstMyr: Double,
         val crustAgeBarMyr: Double,
-        /** The belts' books' worst gap, each as a share of its own span: the window's, the rate's and the strike tensor's. */
+        /**
+         * The belts' books' worst gap, each as a share of its own span: the window's, the rate's and
+         * the strike tensor's, and the back-arc's age where both read one.
+         */
         val beltBooksWorstShare: Double,
         /** Cells whose plate, orogeny kind, terrane, or whether they were ever rifted or have an onset, differ: a share of all cells. */
         val categoriesDiffering: Double,
@@ -81,6 +84,7 @@ class CrustMapParity private constructor(private val inputs: CrustMapInputs, pri
             device.strikeNorthNorth to reference.strikeNorthNorth
         ).map { (there, here) -> Triple(there, here, span(here)) }
         val onsetSpan = span(reference.windowOnsetMyrAgo)
+        val backArcSpan = span(reference.backArcAgeMyr)
         var booksWorst = 0.0
         fun book(gap: Float, span: Double) {
             if (span > 0.0) booksWorst = max(booksWorst, abs(gap.toDouble()) / span)
@@ -102,6 +106,9 @@ class CrustMapParity private constructor(private val inputs: CrustMapInputs, pri
                 floorWorst = max(floorWorst, abs((device.seafloorAgeMyr[cell] - reference.seafloorAgeMyr[cell]).toDouble()))
             }
             crustWorst = max(crustWorst, abs((device.crustAgeMyr[cell] - reference.crustAgeMyr[cell]).toDouble()))
+            if (device.backArcAgeMyr[cell] >= 0f && reference.backArcAgeMyr[cell] >= 0f) {
+                book(device.backArcAgeMyr[cell] - reference.backArcAgeMyr[cell], backArcSpan)
+            }
             if (device.plateId[cell] != reference.plateId[cell] || device.orogenyKind[cell] != reference.orogenyKind[cell] ||
                 device.terrane[cell] != reference.terrane[cell] || (device.riftAgeMyr[cell] >= 0f) != (reference.riftAgeMyr[cell] >= 0f) ||
                 (device.backArcAgeMyr[cell] >= 0f) != (reference.backArcAgeMyr[cell] >= 0f) ||

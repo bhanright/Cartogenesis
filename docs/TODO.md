@@ -38,6 +38,25 @@
   south). Measured: the upper plates' shortening alone carries 0.015 of the share over fifteen seeds
   (0.050 on the standard four), since a margin trimmed evenly along its trench follows the
   boundary's line. 2026-10-25, TH1-2b.
+  **TH1-2c, moved and not settled.** Two findings. The spiral lattice drawn round the planet's own
+  axis carried its neighbors' bearings into the edge along the map's rows: over forty seeds the edge
+  read 0.318 of straight runs on lattices whose axis was the planet's (as drawn, and turned about
+  the polar axis) and 0.300 on three tilted ones (2.4 to 2.8 standard errors apart); each world's
+  lattice now lies at a turn its seed draws (`TectonicHistory.latticeTurnOf`), and fifteen seeds read
+  0.287 where they read 0.324, the standard four 0.285 (Earth 0.146). And what still makes the
+  ribbons: a split's cheapest path runs through the weakest ground, and every deformed belt is half
+  ordinary ground where a craton is four times it, so a continent parts along its belts, and the belts
+  behind an active margin run parallel to the trench (of the ten continental splits in the
+  histories of seeds 7, 1066, 42, 1234, 99 and 718106, three ran 400 to 1,000 km behind their
+  plate's trenches along its Andean belts and sliced off strips of 400 to 1,900 lattice points, four
+  followed old sutures and three both; seed 7's long strip in TH1-2b's world was cut at 65 Ma along
+  a suture parallel to its margin and cut again at 50 and 10 Ma). Tried and not kept: the belts weak only
+  while their back-arc or orogen is hot (Hyndman et al. 2005's strength against temperature,
+  hardening at the back-arc's 251 Myr), which moved the cuts off the old sutures onto the live arcs
+  and sliced more strips (seed 99's at 25 Ma along 333 points of Andean belt 370 to 710 km behind
+  its trench), 0.308 against 0.324 over fifteen seeds with seeds moving both ways. What would settle
+  it is a split that opens only where the plate is pulled apart across it, a back-arc only where its
+  upper plate retreats (Heuret and Lallemand 2005). 2026-10-25, TH1-2c.
 - **The ranges stood a third of their crust's height after the rounds; held at TH1-2b, with what
   is left (TH1-2, recorded; TH1-2b, found and fixed in part).** TH1-2 read 79.5 km of range above
   1,500 m per million km² of land against Earth's 197. Two causes. Earth's figure counted the ice
@@ -53,7 +72,13 @@
   linear in the erosion rate, where Earth's 39 km boxes of active ranges hold 1,250 to 1,890 m of
   relief over rates a hundredfold apart, as Lague (2014) finds the steady state needs `n` near 2;
   read from the thickening rate instead of the wear the relief ran to 6 km at the thickest
-  collisions, so the wear's is the one used. 2026-10-25, TH1-2b.
+  collisions, so the wear's is the one used. 2026-10-25, TH1-2b. **TH1-2c:** the steepness now follows
+  Lague's compilation, `n` near 2 (`UnresolvedRelief`): on the standard worlds' high young belts the
+  cell's mean over its channel reads 125 to 655 m on collision belts and 49 to 330 m on Andean ones at
+  512 rows (tenth to ninetieth percentile; the linear law 40 to 1,109 and 6 to 281), against
+  Earth's 39 km boxes of ranges whose ground stands above a kilometer, 343 to 1,098 m at the median
+  range by range (GMRT). The square-root law narrows the spread toward Earth's; both stand short of
+  Earth on the Andean belts, the reach above a channel head (the hillslopes) being outside it.
 - **Young ranges stand behind fewer advancing margins than Earth's (TH1-2b, recorded).** Of the
   present trench points where a continent's plate advances on its trench, 0.333 on the standard
   worlds have a young range within 750 km (`MountainRangesTest`; seeds 7, 42, 1234, 99: 0.48,
@@ -63,15 +88,69 @@
   small. Earth's ranges behind its slow margins (Cascadia, Mexico) are the Cordillera's, inherited
   and hot; the history's arcs and thrust belts are short-lived where its trenches move, and the
   back-arc's heat stands only under its extended crust (the entry below). 2026-10-25, TH1-2b.
-- **A back-arc's heat stands only under its extended crust (TH1-2b).** Hyndman, Currie and
-  Mazzotti (2005) find every back-arc hot across its whole width, extended or not, about a kilometer
-  of buoyancy; the plate stage gives it to the crust the history stretched behind an arc, where the
-  province needs it, and not yet to an advancing margin's back-arc, where thick crust already
-  stands high and the heat would raise the Andean belts with it. What it needs: the history to mark
-  a back-arc's width behind every live trench and the time its subduction stopped. 2026-10-25, TH1-2b.
+  **TH1-2c, raised and still short.** With the hot back-arc behind every live trench the standard
+  worlds read 0.652 (seeds 7, 42, 1234, 99: 0.58, 0.68, 0.73, 0.59; bar 0.834). Each lever alone, on
+  TH1-2b's lattice: the heat 0.333 to 0.735, the square-root law 0.329, both 0.716. At the plate
+  stage 0.96 of the points carry a range (pooled); of the 1,828 the finished map loses 432 to the
+  erosion stage (their highest smoothed ground within reach 2,226 m at the plate stage and 1,236 m
+  after, at the median; the passing ones lose 918 m too: the arcs and thrust belts behind the trench
+  are cut by the replay and the rounds, the belts at large keeping 0.755 of their height on seed 42),
+  121 stood low already and 84 have little land in reach. The hot back-arcs alone stand 1.4 to 1.6
+  km, at the threshold. What it needs: the erosion stage's cut on the narrow belts behind a trench
+  held against the history's own wear there, as TH1-2b held the belts at large. 2026-10-25, TH1-2c.
+- **The history's back-arcs are hot over about twice Earth's share of the continents (TH1-2c,
+  measured).** Hyndman, Currie and Mazzotti (2005) find every back-arc hot across its whole width
+  and the mobile belts covering nearly a quarter of the continents; the history now marks a
+  back-arc's width behind every live trench, cratons left out, and the plate stage stands it on the
+  heat Hyndman (2015) measures, 1,600 m over a craton, cooling at 251 Myr from its trench's death.
+  The standard worlds' continental crust is 0.37 to 0.56 hot, heat-weighted: the history's
+  continents meet about twice Earth's trench (the crust-area entry), and its trenches die and move
+  often. The land reads a mean of 834 m and 0.085 above 2 km on the
+  standard worlds (Earth's ice-free land 673 m and 0.058 on ETOPO5 at 512 rows), 0.226 between 1
+  and 2 km (`HypsometryTest`: Earth 0.154 +- 0.033), and range above 1,500 m runs 228.5 km per
+  million km2 of land, twice Earth's 116.2 (`MountainRangesTest`). Not tuned, and not re-read
+  against the datum: the datum is Earth's platform, a quarter of it hot, and taking that quarter's
+  heat off every column moved the land's mean by 5 m, the percentile cut following it; what moves
+  the land is how much of the crust the history leaves hot.
+  2026-10-25, TH1-2c.
+- **The Andean ranges stand on the hot back-arc's plateau, less dissected than Earth's (TH1-2c,
+  recorded).** With the heat the Andean stratum is held for the first time, 18 ranges over 39,410 km
+  on the standard worlds, mean crest 2,816 m: crest zone low 0.083 and width CV 0.172 against the
+  least dissected of Earth's (Mexico's 0.133 and 0.185; the Andes 0.312 and 0.455), high run 727 km
+  and 2.08 massifs per 1,000 km inside Earth's (`MountainRangesTest`). The heat is a smooth field 75 km
+  wide, and the ranges stand on it as on a plateau the rounds have not cut into valleys; Earth's
+  Andes are cut by its wet north's and glaciated south's rivers. 2026-10-25, TH1-2c.
+- **Water the ocean cannot reach stands at the sea's level when it is larger than the Caspian
+  (TH1-2c, measured).** The islet field in TH1-2b's site world was not the extended province: it lay
+  on a 2.6-billion-year craton, an enclosed body of 5.3 million km2 whose floor stood 38 m under the
+  sea's level on the median and whose sill, a notch the rounds cut through an old collision belt,
+  stood 65 m over it. Larger than the Caspian, the sea-level stage keeps such water as sea (H5), and
+  the craton's own relief, as rough as Earth's drowned platforms' (20 m within five cells against
+  Hudson Bay's 18 and the Baltic's 24), came through as 75 islets, 14.2 per million km2, where Earth's
+  drowned platforms carry at most the Baltic's 8.4 (`ExtendedProvinceTest`); at its own spill level
+  the body would have held 16. TH1-2c's site world is another world (the lattice's turn) and its
+  inland bodies read 3.4 to 6.1, but it holds 16 million km2 of such enclosed seas where TH1-2b's
+  held 9, its cold cratons standing lowest under the hot back-arcs' rims; and the same pattern now
+  shows on the standard worlds at 1,024 rows, which the clause does not read: seed 7 has an enclosed
+  sea of 2.67 million km2 with 55 islets (20.6 per million km2) and seed 1066 one of 1.91 with 17
+  (8.9), where TH1-2b's seeds 7 and 42 had none over 0.2 million km2 and 1066 one at 3.2. Whether
+  water the ocean cannot reach should stand at its own level whatever its size, and what then
+  becomes of H5's reasons for the cap, is the question; the cold interiors standing under the cut
+  is the other half. 2026-10-25, TH1-2c.
+- **The site world's oldest extended crust lies under the ocean its columns stand above (TH1-2c,
+  recorded).** On the world the lattice's turn now draws for seed 718106 at the site's settings, the
+  extended province is 0.886 land against the 0.947 its columns predict on the stage's own heat
+  and the plate stage's own waterline (`ExtendedProvinceTest`, bar 0.897). The 827 drowned cells
+  are all in the ocean, not in an enclosed sea, at a margin; they were stretched about 185 Myr ago
+  behind a trench that died about 177 Myr ago (half the heat left), most with 30 to 40 km of crust.
+  The plate stage already stands them there (0.887 above the finished shoreline), so it is the
+  platform's ground and not the rounds; what lowers it under its columns is not found.
+  2026-10-25, TH1-2c.
 - **The unresolved relief and the back-arc's heat have no card path (TH1-2b).** Both are per-cell
   passes on the processor: the relief is read once and spent inside the rounds' incision, which has
-  no card path, and the heat is a Gaussian blur in the plate stage. 2026-10-25, TH1-2b.
+  no card path, and the heat is a Gaussian blur in the plate stage. 2026-10-25, TH1-2b. **TH1-2c:** the
+  back-arc's age is read onto the map by the crust map's pass, card included (`GpuCrustMap`); the
+  heat's blur and the relief stay on the processor.
 - **The history's crust area balance sits near its bar (TH1-2, measured).** With the upper plates
   shortened at their trenches the crust's area moves by -12.6% and -12.9% on seeds 7 and 1066 over
   200 Myr (bar 13.9%; without the shortening and the widening, -3.8% and -4.2%), the margins'
@@ -120,10 +199,15 @@
   since a world's old stratum takes the same; held to the two old orogens alone it failed (high run
   699 km against 626, massifs 1.79 against 3.28). 2026-10-25, TH1-2b.
 - **The crust's divider dimension moves with the lattice's turn at the bar's edge (TH1-2b,
-  recorded).** On the standard four, 1.170 as drawn and 1.151 turned, 0.0192 apart against a bar of
-  0.0190 (`CrustMapGeometryTest`); over ten seeds the paired difference is 0.010 at 1.4 of its
-  standard errors, the straight runs' 0.025 at 2.1. The straight-run clause TH1-2 recorded is held
-  again. 2026-10-25, TH1-2b.
+  recorded; TH1-2c, closed).** On the standard four, 1.170 as drawn and 1.151 turned, 0.0192 apart
+  against a bar of 0.0190 (`CrustMapGeometryTest`); over ten seeds the paired difference is 0.010 at
+  1.4 of its standard errors, the straight runs' 0.025 at 2.1. The straight-run clause TH1-2 recorded
+  is held again. 2026-10-25, TH1-2b. **TH1-2c:** real, and from the lattice's axis (the first entry);
+  with each world's lattice turned by its seed the dimension reads 0.004 apart (bar 0.012), corners
+  0.011 (0.029), straight runs 0.015 (0.045), all held. The polygon clause now reads turns on the
+  ground, the spiral lattice's corners spread over 50 to 70 degrees once it no longer lies along the
+  map's rows, and the seam clause reads the lattice as drawn, a coast crossing a turned lattice's
+  polar cap being no seam.
 - **What TH1-2 moved in the everyday tier (recorded).** On the history's new worlds, each a known
   failure against its finding: the land holds too little above 2 km, 2.9% against Earth's 11.3%
   (`HypsometryTest`, where TH1-1 recorded the opposite miss), and the isolated wet spots the high

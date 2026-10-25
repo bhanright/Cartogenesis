@@ -850,9 +850,10 @@ object PlateStage {
      * behind their arcs, live or since stopped ([Isostasy.Columns.hotBackArcBuoyancyMetres]),
      * air-equivalent meters, smoothed over the depth the heat reaches ([HOT_BACK_ARC_DEPTH_KM]): a
      * mantle's temperature does not step where the crust's mark does, and the plate above it is
-     * stood by the whole column beneath.
+     * stood by the whole column beneath. Internal so `ExtendedProvinceTest` predicts the province's
+     * columns on the heat the stage stands them on.
      */
-    private fun backArcHeatMetres(
+    internal fun backArcHeatMetres(
         config: WorldGenConfig,
         crust: CrustOnMap,
         continentalShare: FloatArray,

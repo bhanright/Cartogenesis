@@ -32,14 +32,15 @@ import kotlin.math.sqrt
  * resolves at the rounds' rate, and the cell's ground stands this much above the channel they cut.
  *
  * **The steepness against the rate** is Earth's measured one, not the rounds' linear law. Lague's
- * compilation of steady channels (2014, figure 1 and section 2) runs from a normalized steepness of
+ * compilation of steady channels (2014, his figure 1) runs from a normalized steepness of
  * about 20 m^0.9 at 0.02 mm a year to about 500 at 14 mm a year, the square root of the rate, and
  * every data set in it but one calls for `n` near 2 and `m` near 1 (so `theta` is still a half): a
  * threshold for incision and floods that come and go make a river's long-term cut grow faster than
  * its slope. Read at the linear law instead, the steepness grew with the rate a hundredfold where
  * Earth's ranges' 39 km boxes hold relief that differs about threefold (docs/DESIGN_LEDGER.md,
- * TH1-2c). The rock's erodibility scales `K` in `E = K A ks^2` as it does in the rounds' law, so the
- * steepness goes as one over its square root ([steadySteepnessMeters]).
+ * TH1-2c). The rock's erodibility scales `K` in `E = K A S^2`, which at the steady slope
+ * `S = ks A^-0.5` is `K ks^2`, as it scales the rounds' law, so the steepness goes as one over its
+ * square root ([steadySteepnessMeters]).
  *
  * **The cell's mean.** A cell's height is its ground on the mean, which stands over its outlet by
  * a share of its relief, the hypsometric integral: [EARTH_CELL_HYPSOMETRIC_INTEGRAL], measured on

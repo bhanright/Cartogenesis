@@ -668,13 +668,21 @@ internal object HydraulicErosion {
         val runoff = FloatArray(cellsAcross * cellsDown)
         val erodibility = FloatArray(cellsAcross * cellsDown)
 
+        // The relief each cell's ground holds above the channel its water leaves by, in the height
+        // field's unit: the reaches of its rivers finer than the grid (see [UnresolvedRelief]).
+        val unresolvedRelief = tectonics?.orogenicExcessKm?.let { excess ->
+            val meters = UnresolvedRelief.meters(config, excess.data, rockErodibility)
+            val metersPerFieldUnit = config.scale.reliefSpanMetres
+            FloatArray(meters.size) { meters[it] / metersPerFieldUnit }
+        }
+
         // The young belts' rise and wear over the exposure window, before the rounds cut the last
         // four million years everywhere (see [BeltErosion]).
         val window = tectonics?.window
         if (window != null) {
             val replay = BeltErosion.replay(
                 config, working.data, window, upliftRateMmPerYear?.data, rainfallMm, vegetationDensity, rockErodibility,
-                provisionalSeaLevel, shieldCut
+                provisionalSeaLevel, shieldCut, unresolvedRelief
             )
             onReplay?.invoke(replay)
         }
@@ -1040,7 +1048,8 @@ internal object HydraulicErosion {
                 incisedAt = if (carryingSediment) incisedAt else null,
                 onlyAboveBase = receiverClamp,
                 watch = incisionWatch,
-                round = round
+                round = round,
+                unresolvedRelief = unresolvedRelief
             )
             incisionWatch?.incised(
                 round, isLand, directions, ground, relative, area.data, landCells, landRange,
@@ -2303,7 +2312,8 @@ internal object HydraulicErosion {
         incisedAt: DoubleArray?,
         onlyAboveBase: Boolean = true,
         watch: IncisionWatch? = null,
-        round: Int = 0
+        round: Int = 0,
+        unresolvedRelief: FloatArray? = null
     ) {
         val asFound = if (watch != null) surfaceOf.copyOf() else null
         // The water's surface over each cell of a filled basin for this pass, NaN elsewhere: set
@@ -2330,12 +2340,19 @@ internal object HydraulicErosion {
             val stepCellWidths = rates.groundSteps.between(cell, receiver, cellsAcross)
             val courantNumber =
                 rates.courantCoefficient * sqrt(discharge[cell] / landCells) * erodibility[cell] / stepCellWidths
+            // The channel the law cuts lies under the cell's ground by the relief of its reaches
+            // finer than the grid, and under its receiver's by that one's own, unless the receiver
+            // is water, whose surface the channel meets ([UnresolvedRelief]).
+            val reliefOffset =
+                if (unresolvedRelief == null) 0f
+                else unresolvedRelief[cell] - (if (isLand[receiver] && waterSurface[receiver].isNaN()) unresolvedRelief[receiver] else 0f)
+            val gradesTo = baseAfter + reliefOffset
             // Under the water as it now stands there is no channel to cut and nothing to raise; a
             // cell the falling water has uncovered is graded like any other.
             val submerged = underStandingWater && height <= waterSurface[cell]
             val after =
-                if (submerged || (height <= baseAfter && onlyAboveBase)) height
-                else (baseAfter + (height - baseAfter).toDouble() / (1.0 + courantNumber)).toFloat()
+                if (submerged || (height <= gradesTo && onlyAboveBase)) height
+                else (gradesTo + (height - gradesTo).toDouble() / (1.0 + courantNumber)).toFloat()
             if (after != height) {
                 surfaceOf[cell] = after
                 if (incisedAt != null && after < height) incisedAt[cell] = height.toDouble() - after.toDouble()
@@ -2348,7 +2365,7 @@ internal object HydraulicErosion {
                         maxOf(asFound[receiver], shorelineHeight + ground[receiver] * landRange)
                     else -> asFound[receiver]
                 }
-                watch.cut(round, cell, receiver, courantNumber, height, baseBefore, baseAfter, after)
+                watch.cut(round, cell, receiver, courantNumber, height, baseBefore + reliefOffset, gradesTo, after)
             }
         }
     }

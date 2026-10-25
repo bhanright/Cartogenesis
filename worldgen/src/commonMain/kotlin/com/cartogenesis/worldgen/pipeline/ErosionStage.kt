@@ -24,20 +24,24 @@ data class ErosionResult(
 /**
  * What the plate stage hands the erosion beside the ground: [upliftRateMmPerYear], how fast the rock
  * is rising under each cell now, millimeters a year; [rockErodibility], a factor on bedrock K per
- * cell, or null for one rock everywhere; and [window], the belts' recent history for the rounds to
- * replay before their own ([BeltErosion]), or null to run no replay.
+ * cell, or null for one rock everywhere; [window], the belts' recent history for the rounds to
+ * replay before their own ([BeltErosion]), or null to run no replay; and [orogenicExcessKm], what
+ * orogeny left on the crust, km, whose wear sets how steep the rivers finer than a cell stand where
+ * the crust is no longer thickened ([UnresolvedRelief]), or null.
  */
 class ErosionTectonics(
     val upliftRateMmPerYear: FloatField,
     val rockErodibility: FloatField? = null,
-    val window: BeltWindow? = null
+    val window: BeltWindow? = null,
+    val orogenicExcessKm: FloatField? = null
 ) {
     companion object {
         /** Everything [plates] hands the erosion, as the engine passes it. */
         fun of(plates: PlateResult): ErosionTectonics = ErosionTectonics(
             upliftRateMmPerYear = plates.upliftRateMmPerYear,
             rockErodibility = plates.rockErodibility,
-            window = BeltWindow(plates.windowTectonicKm, plates.windowWearKm, plates.windowOnsetMyrAgo, plates.exposureWindowMyr)
+            window = BeltWindow(plates.windowTectonicKm, plates.windowWearKm, plates.windowOnsetMyrAgo, plates.exposureWindowMyr),
+            orogenicExcessKm = plates.orogenicExcessKm
         )
     }
 }

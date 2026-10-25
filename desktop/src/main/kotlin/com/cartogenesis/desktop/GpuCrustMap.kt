@@ -648,7 +648,7 @@ class GpuCrustMap private constructor(override val name: String) : CrustMapAccel
                 }
                 outFloats[cell * $BELT_OUT_FLOATS] = ridge;
                 outFloats[cell * $BELT_OUT_FLOATS + 1] = province;
-                outFloats[cell * $BELT_OUT_FLOATS + 2] = exp(softness * uLogBand);
+                outFloats[cell * $BELT_OUT_FLOATS + 2] = 1.0 / ((1.0 - softness) + softness * exp(-uLogBand));
             }
         """.trimIndent()
     }

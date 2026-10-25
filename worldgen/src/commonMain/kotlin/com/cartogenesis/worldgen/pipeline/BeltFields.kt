@@ -66,7 +66,8 @@ class BeltFieldOutputs(val ridgeMeters: FloatArray, val provinceMeters: FloatArr
  * own, from the history's strike tensor, as Lagae et al. vary a kernel's orientation over space.
  *
  * **Rock erodibility** is a factor on the stream-power law's K across the configured bedrock band,
- * `band ^ softness`, the softness the larger of the rock's own and a terrane boundary's.
+ * the softness the share of the band's weakest rock in the cell, the larger of the rock's own and a
+ * terrane boundary's, mixed in series ([mixedErodibility]).
  *
  * The processor's [readOnProcessor] is the reference a card is held to ([BeltFieldsParity]).
  */
@@ -80,7 +81,7 @@ internal object BeltFields {
         val ridge = FloatArray(cells)
         val province = FloatArray(cells)
         val erodibility = FloatArray(cells)
-        val logBand = kotlin.math.ln(inputs.erodibilityBandFactor)
+        val inverseBand = 1.0 / inputs.erodibilityBandFactor
         parallelChunks(0, rows) { fromRow, toRow ->
             for (row in fromRow until toRow) {
                 val latitude = PI / 2 - (row + 0.5) / rows * PI
@@ -88,7 +89,7 @@ internal object BeltFields {
                     val cell = row * columns + column
                     val weak = if (inputs.weakZoneKm[cell] < 0f) 0.0 else exp(-inputs.weakZoneKm[cell] / inputs.weakZoneEfoldKm)
                     val softness = maxOf(inputs.softness[cell].toDouble(), weak)
-                    erodibility[cell] = exp(softness * logBand).toFloat()
+                    erodibility[cell] = mixedErodibility(softness, inverseBand).toFloat()
                     val ridgeAmplitude = inputs.ridgeAmplitudeMeters[cell]
                     val provinceAmplitude = inputs.provinceAmplitudeMeters[cell]
                     if (ridgeAmplitude <= 0f && provinceAmplitude <= 0f) continue
@@ -131,6 +132,16 @@ internal object BeltFields {
         }
         return BeltFieldOutputs(ridge, province, erodibility)
     }
+
+    /**
+     * The factor on bedrock K of ground whose [softness] share is the weakest rock the band holds
+     * and the rest the hardest, [inverseBand] the band's hardest over its weakest: the harmonic
+     * mean, `1 / ((1 - s) + s / band)`, since a river crossing a belt's units in turn cuts each at
+     * its own rate and its long profile's relief is the sum of theirs, each reach's steady slope
+     * going as one over its K (Whipple and Tucker 1999; Lague 2014): the units in series, as the
+     * belt's rocks lie along its strike and its outlets cross them.
+     */
+    fun mixedErodibility(softness: Double, inverseBand: Double): Double = 1.0 / ((1.0 - softness) + softness * inverseBand)
 
     /**
      * Unit-variance sparse Gabor noise at the point ([px], [py], [pz]) km, its crests square to the

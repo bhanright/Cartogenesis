@@ -102,7 +102,8 @@ internal object BeltErosion {
         coverDensity: FloatArray,
         rockErodibility: FloatArray?,
         provisionalSeaLevel: Float,
-        shieldCut: Boolean
+        shieldCut: Boolean,
+        unresolvedRelief: FloatArray? = null
     ): BeltReplay {
         val erosion = config.erosion
         val scale = config.scale
@@ -326,10 +327,13 @@ internal object BeltErosion {
                 if (down < 0) continue
                 if (filled[local] - surface[cell] > pondDepthField) continue
                 val downLocal = localOf[down]
+                // The channel lies under the cell's ground by the relief of its reaches finer than
+                // the grid, and under a land receiver's by that one's ([UnresolvedRelief]).
+                val ownRelief = unresolvedRelief?.get(cell) ?: 0f
                 val base = when {
-                    !isLand[down] || surface[down] <= shoreline -> shoreline
-                    downLocal >= 0 && filled[downLocal] - surface[down] > pondDepthField -> filled[downLocal]
-                    else -> surface[down]
+                    !isLand[down] || surface[down] <= shoreline -> shoreline + ownRelief
+                    downLocal >= 0 && filled[downLocal] - surface[down] > pondDepthField -> filled[downLocal] + ownRelief
+                    else -> surface[down] + ownRelief - (unresolvedRelief?.get(down) ?: 0f)
                 }
                 val height = surface[cell]
                 if (height <= base) continue

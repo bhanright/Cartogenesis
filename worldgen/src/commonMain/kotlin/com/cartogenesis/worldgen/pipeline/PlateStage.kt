@@ -535,9 +535,12 @@ object PlateStage {
         val excessForFullOrogen = crustAgeReference * beltReliefMetres / freeboardMetresPerKm
         val standardThicknessKm = config.isostasy.continentalCrustThicknessKm
 
+        // The hot mantle under the back-arcs the history stretched (see [backArcHeatMetres]).
+        val backArcHeat = backArcHeatMetres(config, crust, continentalShare.data, columns)
+
         // The belts' own relief at the map's scale and the rock's erodibility, read off the crust
         // the history left (see [BeltFields]).
-        val beltInputs = beltFieldInputs(config, crust, continentalShare.data, stampedShare, excessForFullOrogen)
+        val beltInputs = beltFieldInputs(config, crust, continentalShare.data, stampedShare, excessForFullOrogen, columns, backArcHeat)
         val beltFields = readBeltFields(beltInputs) ?: BeltFields.readOnProcessor(beltInputs)
 
         // The rock rising under the belts the history is still thickening: Airy's freeboard of the
@@ -625,7 +628,7 @@ object PlateStage {
                         if (isostatic) {
                             columns.altitudeMetres(
                                 share, seafloorAgeMyr[cell], thickeningKm,
-                                columns.stretchedThermalBuoyancyMetres(crust.thicknessKm[cell], crust.riftAgeMyr[cell])
+                                maxOf(columns.stretchedThermalBuoyancyMetres(crust.thicknessKm[cell], crust.riftAgeMyr[cell]), backArcHeat[cell])
                             )
                         } else {
                             0f
@@ -775,7 +778,9 @@ object PlateStage {
         crust: CrustOnMap,
         continentalShare: FloatArray,
         stampedShare: FloatArray,
-        excessForFullOrogen: Float
+        excessForFullOrogen: Float,
+        columns: Isostasy.Columns,
+        backArcHeat: FloatArray
     ): BeltFieldInputs {
         val tectonics = config.tectonics
         val cells = config.width * config.height
@@ -796,7 +801,19 @@ object PlateStage {
             if (share > 0f) {
                 val inherited = (crust.excessKm[cell] * (1f - stampedShare[cell]) / excessForFullOrogen).coerceIn(0f, 1f)
                 ridgeAmplitude[cell] = tectonics.orogenReliefStandardDeviationMetres * inherited * share
-                if (kind == OrogenyKind.BACK_ARC_EXTENSION.ordinal) provinceAmplitude[cell] = provinceStandardMeters * fading * share
+                if (kind == OrogenyKind.BACK_ARC_EXTENSION.ordinal) {
+                    // The share of the ranges' span from their basins' floors to their crests that
+                    // stands above the sea, the province's mean ground on its own column halfway
+                    // between: what lies under the water is drowned basin, filled as the sea's
+                    // floor is, and the ranges' cell-mean relief is drawn only on what stands.
+                    val datum = if (!config.isostasy.enabled) 0f else columns.altitudeMetres(
+                        share, crust.seafloorAgeMyr[cell],
+                        crust.thicknessKm[cell] - config.isostasy.continentalCrustThicknessKm - crust.excessKm[cell] * stampedShare[cell],
+                        maxOf(columns.stretchedThermalBuoyancyMetres(crust.thicknessKm[cell], crust.riftAgeMyr[cell]), backArcHeat[cell])
+                    )
+                    val standing = ((datum / PROVINCE_RANGE_RELIEF_METERS + 0.5).toFloat()).coerceIn(0f, 1f)
+                    provinceAmplitude[cell] = provinceStandardMeters * fading * share * standing
+                }
             }
             val young = when (kind) {
                 OrogenyKind.NONE.ordinal -> if (share >= 0.5f) 0f else 1f
@@ -826,6 +843,38 @@ object PlateStage {
             erodibilityBandFactor = ERODIBILITY_BAND_FACTOR
         )
     }
+
+    /**
+     * The heat of a back-arc's mantle under every cell whose crust the history stretched behind an
+     * arc ([Isostasy.Columns.hotBackArcBuoyancyMetres]), air-equivalent meters, smoothed over the
+     * depth the heat reaches ([HOT_BACK_ARC_DEPTH_KM]): a mantle's temperature does not step where
+     * the crust's mark does, and the plate above it is stood by the whole column beneath.
+     */
+    private fun backArcHeatMetres(
+        config: WorldGenConfig,
+        crust: CrustOnMap,
+        continentalShare: FloatArray,
+        columns: Isostasy.Columns
+    ): FloatArray {
+        val cells = config.width * config.height
+        val heat = FloatField(config.width, config.height)
+        var any = false
+        for (cell in 0 until cells) {
+            if (crust.orogenyKind[cell] != OrogenyKind.BACK_ARC_EXTENSION.ordinal || continentalShare[cell] <= 0f) continue
+            heat.data[cell] = columns.hotBackArcBuoyancyMetres(crust.riftAgeMyr[cell])
+            any = true
+        }
+        if (!any || !config.isostasy.enabled) return FloatArray(cells)
+        val spreadKm = HOT_BACK_ARC_DEPTH_KM / 2.0
+        GaussianBlur.apply(heat, spreadKm / config.cellWidthKm, spreadKm / config.cellHeightKm)
+        return heat.data
+    }
+
+    /**
+     * How deep a back-arc's heat reaches, km: Hyndman, Currie and Mazzotti's (2005) 150 km; the
+     * heat is spread over half that either way.
+     */
+    private const val HOT_BACK_ARC_DEPTH_KM = 150.0
 
     /**
      * How far each cell lies from the nearest boundary between two terranes of continental crust,

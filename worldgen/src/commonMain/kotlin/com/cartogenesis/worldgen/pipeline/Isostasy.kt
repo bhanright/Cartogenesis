@@ -157,6 +157,26 @@ internal object Isostasy {
         }
 
         /**
+         * The heat of a back-arc's mantle, as the air-equivalent metres of buoyancy it is worth, for
+         * a back-arc last stretched [riftAgeMyr] million years ago; zero where none was.
+         *
+         * Back-arcs are hot across their whole width, their lithosphere thin over a mantle the
+         * subduction keeps convecting, and they stand high on crust thinner than a craton's for it:
+         * the North American Cordillera's crust is rarely thicker than 35 km, yet it stands about
+         * 1,500 m, where cratons with 40 km stand near the sea (Hyndman, Currie and Mazzotti,
+         * *Subduction zone backarcs, mobile belts, and orogenic heat*, GSA Today 15(2), 2005). Their
+         * figure: a mantle 200 C hotter on the mean to 150 km, at a thermal expansion of 3.5e-5 per
+         * degree, balances about a kilometer of elevation ([HOT_BACK_ARC_BUOYANCY_METRES]). The heat
+         * leaves as the plate cools once the stretching that marks the subduction's pull has
+         * stopped, at the plate's own thermal time constant, as a stretched margin's does
+         * ([stretchedThermalBuoyancyMetres]).
+         */
+        fun hotBackArcBuoyancyMetres(riftAgeMyr: Float): Float {
+            if (riftAgeMyr < 0f) return 0f
+            return HOT_BACK_ARC_BUOYANCY_METRES * exp(-riftAgeMyr / isostasy.seafloorFlatteningTimeMyr)
+        }
+
+        /**
          * The altitude a column floats at, for a cell that is [continentalShare] continental crust
          * of the rest oceanic and [seafloorAgeMyr] million years old where it is oceanic, carrying
          * [extraContinentalThicknessKm] of crust beyond the standard continental column.
@@ -384,6 +404,13 @@ private const val METRES_PER_KM = 1_000.0f
  * `rho_m alpha T1 a / (2 (rho_m - rho_w))`, so `8 / pi^2`. See [Isostasy.Columns.stretchedThermalBuoyancyMetres].
  */
 private val MCKENZIE_THERMAL_SHARE_OF_PLATE = 8f / (PI.toFloat() * PI.toFloat())
+
+/**
+ * A hot back-arc's buoyancy over a craton's, air-equivalent metres: Hyndman, Currie and Mazzotti's
+ * (2005) mean excess temperature of 200 C to a depth of 150 km at a thermal expansion of 3.5e-5 per
+ * degree, `alpha dT L`, 1,050 m, their "approximately ... 1 km".
+ */
+private const val HOT_BACK_ARC_BUOYANCY_METRES = 3.5e-5f * 200f * 150f * METRES_PER_KM
 
 /** Pascals in a gigapascal, for Young's modulus. */
 private const val PASCALS_PER_GPA = 1e9

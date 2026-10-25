@@ -1594,8 +1594,8 @@ internal object TectonicHistory {
             val widthKm = DoubleArray(cellCount)
             for (cell in trenches) {
                 if (slabRank[cell].isNaN()) continue
-                val coupling = if (flatSlab[cell]) FLAT_SLAB_COUPLING else anchoringOf(slabRank[cell])
                 val rate = advanceKmPerMyr[cell].toDouble()
+                val coupling = if (flatSlab[cell]) flatSlabCouplingAt(rate) else anchoringOf(slabRank[cell], rate)
                 val width = coupling * abs(rate) * stepMyr
                 if (width <= 0.0) continue
                 widthKm[cell] = width
@@ -1662,12 +1662,66 @@ internal object TectonicHistory {
          * slab-controlled kind, its trench moving on its own, and holds nothing of the upper plate's
          * motion; the remainder is spread by [ANCHORING_EXPONENT].
          */
-        private fun anchoringOf(rank: Float): Double {
+        private fun anchoringOf(rank: Float, advanceKmPerMyr: Double): Double {
             val share = (rank / (1.0 - FLAT_SLAB_SHARE)).coerceIn(0.0, 1.0)
+            if (advanceKmPerMyr > 0.0) {
+                // An advancing upper plate is shortened where its slab is among the most buoyant
+                // of the share Heuret and Lallemand's table finds compressed at its speed.
+                val compressed = compressedShareAt(advanceKmPerMyr)
+                if (compressed <= 0.0 || share <= 1.0 - compressed) return 0.0
+                return compressedAnchoringAt((share - (1.0 - compressed)) / compressed)
+            }
             if (share <= QUIET_BACK_ARC_SHARE) return 0.0
             val deforming = (share - QUIET_BACK_ARC_SHARE) / (1.0 - QUIET_BACK_ARC_SHARE)
             if (deforming <= SLAB_CONTROLLED_SHARE) return 0.0
             return ((deforming - SLAB_CONTROLLED_SHARE) / (1.0 - SLAB_CONTROLLED_SHARE)).pow(ANCHORING_EXPONENT)
+        }
+
+        /**
+         * The share of advancing upper plates whose back-arc is shortened hard (Heuret and
+         * Lallemand's classes C2 and C3) at an advance of [advanceKmPerMyr], mm a year: read from
+         * their Table 1, whose segments with a measured advance compress hard only where the upper
+         * plate moves fast, "the most intense deformations occur for the fastest moving upper
+         * plates" — none of the 18 advancing at 30 mm a year or less, 3 of the 7 at 30 to 40, 17 of
+         * the 24 faster — drawn between those bins' middles and held past the last.
+         */
+        private fun compressedShareAt(advanceKmPerMyr: Double): Double {
+            val speeds = COMPRESSION_BIN_SPEEDS_MM_PER_YEAR
+            val shares = COMPRESSION_BIN_SHARES
+            if (advanceKmPerMyr <= speeds.first()) return shares.first()
+            for (bin in 1 until speeds.size) {
+                if (advanceKmPerMyr <= speeds[bin]) {
+                    val t = (advanceKmPerMyr - speeds[bin - 1]) / (speeds[bin] - speeds[bin - 1])
+                    return shares[bin - 1] + t * (shares[bin] - shares[bin - 1])
+                }
+            }
+            return shares.last()
+        }
+
+        /**
+         * A flat slab's coupling under an upper plate moving toward its trench at [advanceKmPerMyr]:
+         * [FLAT_SLAB_DEFORMATION_RATIO] times the ordinary slabs' mean beside it, as Gutscher et al.
+         * compare a flat segment's upper plate with the steep segments' beside it on the same
+         * margin, the ordinary mean at that speed being the hard-shortened share times their mean
+         * anchoring. A retreating plate's flat slab keeps the mean of every ordinary slab's.
+         */
+        private fun flatSlabCouplingAt(advanceKmPerMyr: Double): Double {
+            if (advanceKmPerMyr <= 0.0) return FLAT_SLAB_COUPLING
+            return FLAT_SLAB_DEFORMATION_RATIO * compressedShareAt(advanceKmPerMyr) * COMPRESSED_CONTINENTAL_ANCHORINGS.average()
+        }
+
+        /**
+         * The anchoring of a hard-shortened continental upper plate whose slab ranks [quantile] among
+         * the hard-shortened ones, 0 to 1: Heuret and Lallemand's own `Vd / Vup` on the continental
+         * segments of their Table 1 where both are measured ([COMPRESSED_CONTINENTAL_ANCHORINGS]),
+         * read as their distribution, linearly between its order statistics.
+         */
+        private fun compressedAnchoringAt(quantile: Double): Double {
+            val values = COMPRESSED_CONTINENTAL_ANCHORINGS
+            val position = quantile.coerceIn(0.0, 1.0) * (values.size - 1)
+            val below = position.toInt().coerceAtMost(values.size - 2)
+            val t = position - below
+            return values[below] + t * (values[below + 1] - values[below])
         }
 
         /**
@@ -2529,31 +2583,57 @@ internal object TectonicHistory {
             return count
         }
 
-        /** The mean rate the two halves open at across the cut, km per Myr; negative where they close. */
+        /**
+         * The mean rate the two halves open at across the cut's ridge steps, km per Myr; negative
+         * where they close. A step the halves slide along, within Bird's 20 degrees of the relative
+         * motion, is a transform: it opens nothing and is not counted against the cut, as a plate
+         * parts along ridge segments offset by transforms. Each step's direction across the cut is
+         * smoothed over the cut's points two rings out, as the boundaries' are
+         * ([classifyBoundaries]), so a step reads the cut's course rather than the lattice's.
+         */
         private fun openingAcross(sides: IntArray, first: DoubleArray, second: DoubleArray): Double {
-            var sum = 0.0
-            var count = 0
+            val normalX = DoubleArray(cellCount)
+            val normalY = DoubleArray(cellCount)
+            val normalZ = DoubleArray(cellCount)
+            val onCut = BooleanArray(cellCount)
             for (cell in 0 until cellCount) {
                 if (sides[cell] != 0) continue
                 var sx = 0.0; var sy = 0.0; var sz = 0.0
-                var touches = false
                 for (index in sphere.neighborStart[cell] until sphere.neighborStart[cell + 1]) {
                     val next = sphere.neighbors[index]
                     if (sides[next] != 1) continue
-                    touches = true
+                    onCut[cell] = true
                     sx += sphere.x[next] - sphere.x[cell]; sy += sphere.y[next] - sphere.y[cell]; sz += sphere.z[next] - sphere.z[cell]
                 }
-                if (!touches) continue
+                normalX[cell] = sx; normalY[cell] = sy; normalZ[cell] = sz
+            }
+            val wx = second[0] - first[0]; val wy = second[1] - first[1]; val wz = second[2] - first[2]
+            val strikeSlip = sin(STRIKE_SLIP_TOLERANCE_RADIANS)
+            var sum = 0.0
+            var count = 0
+            for (cell in 0 until cellCount) {
+                if (!onCut[cell]) continue
+                var sx = normalX[cell]; var sy = normalY[cell]; var sz = normalZ[cell]
+                for (index in sphere.neighborStart[cell] until sphere.neighborStart[cell + 1]) {
+                    val near = sphere.neighbors[index]
+                    for (again in sphere.neighborStart[near] until sphere.neighborStart[near + 1]) {
+                        val far = sphere.neighbors[again]
+                        if (far == cell || !onCut[far]) continue
+                        sx += normalX[far]; sy += normalY[far]; sz += normalZ[far]
+                    }
+                }
                 val px = sphere.x[cell]; val py = sphere.y[cell]; val pz = sphere.z[cell]
                 val radial = sx * px + sy * py + sz * pz
                 sx -= radial * px; sy -= radial * py; sz -= radial * pz
                 val length = sqrt(sx * sx + sy * sy + sz * sz)
                 if (length <= 0.0) continue
-                val wx = second[0] - first[0]; val wy = second[1] - first[1]; val wz = second[2] - first[2]
                 val vx = wy * pz - wz * py
                 val vy = wz * px - wx * pz
                 val vz = wx * py - wy * px
-                sum += (vx * sx + vy * sy + vz * sz) / length * radiusKm
+                val speed = sqrt(vx * vx + vy * vy + vz * vz)
+                val opening = (vx * sx + vy * sy + vz * sz) / length
+                if (speed > 0.0 && abs(opening) <= strikeSlip * speed) continue
+                sum += opening * radiusKm
                 count++
             }
             return if (count == 0) 0.0 else sum / count
@@ -2664,9 +2744,20 @@ internal object TectonicHistory {
             for (cell in 0 until cellCount) {
                 if (!inPlate[cell]) continue
                 val sample = ownerSample[cell]
+                val kind = samples.orogenyKind[sample].toInt()
                 val base = when {
                     !samples.continental[sample] -> 1.0
-                    samples.orogenyKind[sample].toInt() == OrogenyKind.NONE.ordinal -> CRATON_HARDNESS
+                    kind == OrogenyKind.NONE.ordinal -> CRATON_HARDNESS
+                    // Stretched crust is weak while the heat the stretching brought up is in it,
+                    // and its strength comes back as it cools, at the plate's thermal time constant,
+                    // the time McKenzie's subsidence keeps ([Isostasy.Columns.stretchedThermalBuoyancyMetres]):
+                    // a margin long rifted is no weaker than the floor beside it, so a later cut is
+                    // not drawn along it to slice a ribbon off the continent it bounds.
+                    (kind == OrogenyKind.RIFT.ordinal || kind == OrogenyKind.BACK_ARC_EXTENSION.ordinal) &&
+                        !samples.riftMyrAgo[sample].isNaN() -> {
+                        val cooled = 1.0 - exp(-(samples.riftMyrAgo[sample] - stepAgoEnd).coerceAtLeast(0.0) / isostasy.seafloorFlatteningTimeMyr)
+                        WEAK_ZONE_HARDNESS + (1.0 - WEAK_ZONE_HARDNESS) * cooled
+                    }
                     else -> WEAK_ZONE_HARDNESS
                 }
                 hardness[cell] = base * (1.0 + PATH_NOISE * noise.fbmOnSphere(
@@ -2739,8 +2830,10 @@ internal object TectonicHistory {
 
         /**
          * The cheapest path within [inPlate] from any of [starts] to any point [ends] marks, each step
-         * costing its length times the mean [hardness] of its two points, and through ocean floor
-         * times [stepAnisotropy] about [pole]; null if none reaches.
+         * costing its length times the mean [hardness] of its two points, times [stepAnisotropy]
+         * about [pole]: through a continent as through ocean floor, a plate parts along segments
+         * square to the motion that will open them, offset by transforms along it, as Earth's
+         * rifted margins step (docs/DESIGN_LEDGER.md, TH1-2b). Null if none reaches.
          */
         private fun shortestPath(
             starts: List<Int>,
@@ -2766,12 +2859,10 @@ internal object TectonicHistory {
                     reached = cell
                     break
                 }
-                val oceanHere = !samples.continental[ownerSample[cell]]
                 for (index in sphere.neighborStart[cell] until sphere.neighborStart[cell + 1]) {
                     val next = sphere.neighbors[index]
                     if (!inPlate[next]) continue
-                    var step = sphere.distanceKm(cell, next) * 0.5 * (hardness[cell] + hardness[next])
-                    if (oceanHere && !samples.continental[ownerSample[next]]) step *= stepAnisotropy(cell, next, pole)
+                    val step = sphere.distanceKm(cell, next) * 0.5 * (hardness[cell] + hardness[next]) * stepAnisotropy(cell, next, pole)
                     if (here + step < cost[next]) {
                         cost[next] = here + step
                         previous[next] = cell
@@ -3055,6 +3146,24 @@ internal object TectonicHistory {
      * plates are not deformed by their own motion; the slab's own extension is not modeled.
      */
     private const val SLAB_CONTROLLED_SHARE = 0.4
+
+    /**
+     * Heuret and Lallemand's (2005) Table 1, its segments with a measured advance of the upper plate
+     * binned by that advance: the bins' middles, mm a year (up to 30, 30 to 40, 40 and faster to the
+     * 60 the table's continents reach), and the share of each bin's segments in classes C2 and C3.
+     */
+    private val COMPRESSION_BIN_SPEEDS_MM_PER_YEAR = doubleArrayOf(15.0, 35.0, 50.0)
+    private val COMPRESSION_BIN_SHARES = doubleArrayOf(0.0 / 18.0, 3.0 / 7.0, 17.0 / 24.0)
+
+    /**
+     * `Vd / Vup` on every continental segment of Heuret and Lallemand's Table 1 whose back-arc
+     * shortening rate and upper plate's advance are both given, sorted: Colombia's three (8, 2.5 and
+     * 12.7 mm a year on 38.6, 35.9 and 38.2), northern Chile's two (9.3 and 6 on 43.6 and 47.9), the
+     * three at 23 to 27 S (4.7, 5.8, 5.5 on 46.6, 46.9, 45.1) and Juan Fernandez's two (5.2 on 44.6
+     * and 45.7). Median 0.12, mean 0.15.
+     */
+    private val COMPRESSED_CONTINENTAL_ANCHORINGS =
+        doubleArrayOf(2.5 / 35.9, 4.7 / 46.6, 5.2 / 45.7, 5.2 / 44.6, 5.5 / 45.1, 5.8 / 46.9, 6.0 / 47.9, 8.0 / 38.6, 9.3 / 43.6, 12.7 / 38.2).also { it.sort() }
 
     /**
      * Over a flat slab the plates are coupled harder: Gutscher et al. find the upper plate's seismic

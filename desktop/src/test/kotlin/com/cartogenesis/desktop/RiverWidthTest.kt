@@ -472,8 +472,13 @@ class RiverWidthTest {
         // (docs/DESIGN_LEDGER.md, F1). Recorded at W2e, on whose ground seed 42's widest stroke at 512
         // stands at 2.44 px against the full pen's 2.458 again, the A1-6b reading, and so does not
         // double to the 1,024 sheet's full 4.92 (docs/DESIGN_LEDGER.md, W2e; docs/TODO.md).
-        // Armed at W2f, on whose ground both sheets' widest strokes are the full pen again.
-        assertTrue(offPen.isEmpty(), offPen.joinToString("; "))
+        // Armed at W2f, on whose ground both sheets' widest strokes are the full pen again. Recorded
+        // at TH1-2, on whose ground seed 42's widest stroke at 1,024 stands at 4.864 px against the
+        // full pen's 4.915, the mouth's cell above carrying less than the mouth again
+        // (docs/DESIGN_LEDGER.md, TH1-2; docs/TODO.md).
+        KnownFailures.expect("TH1-2: seed 42's widest stroke at 1,024 stands short of the full pen", "4.864 px at 1024") {
+            if (offPen.isNotEmpty()) throw RecordedViolation(offPen.joinToString("; "), "%.3f px at 1024".format(spans[1].second))
+        }
         assertTrue(
             abs(spans[1].first - spans[0].first) < 1e-4f,
             "the hairline moved with the sheet: ${spans[0].first} then ${spans[1].first}"

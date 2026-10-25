@@ -126,7 +126,13 @@
   summer move, the cold dry interior's ice, the sheet's edge round the pole, the sheet's flow down
   its own surface, seed 1's dry basin, and both of the Caspian clauses. Four classes ran out of
   heap together and passed alone (`GlaciationLatticeTest`, `IceSheetTest`, `LakeWaterBalanceTest`,
-  `RealmIdRangeTest`), as at TH1-1b. 2026-10-25, TH1-2.
+  `RealmIdRangeTest`), as at TH1-1b. In `:cartography`'s deep tier the relief's exaggeration
+  sweep finds no clear exaggeration at all on the gallery ground, its first step already pinning a
+  face of the cone (NaN, which the clause as written let pass and so read as fixed), the ground the
+  replay dissects being steeper in its tail; `EarthSizeGeometryReport` ran out of heap with the rest
+  and passed alone. In `:desktop`'s, seed 42's widest river stroke at 1,024 rows stands at 4.864 px
+  against the full pen's 4.915, and four sea cells come back above the stated sea level, as at C1b.
+  2026-10-25, TH1-2.
 - **`:ui`'s tier fails as it did on TH1-1b (measured at TH1-2).** Eleven of its 160 tests fail on
   both trees alike: `BugReportTest` expects the ocean coverage at 62% where the default has been 71%
   since TH1-1, and nine cases that generate worlds run out of the test task's heap in

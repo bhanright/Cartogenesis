@@ -664,8 +664,12 @@ class ReliefShadingTest : BorrowsSharedWorlds() {
         // Recorded at TH1-1, on whose gallery ground the steepest that pins no face is 48.00, with the
         // drawing's other calibrations (docs/DESIGN_LEDGER.md, TH1-1; docs/TODO.md, "The drawing's
         // calibrated figures moved with the ground").
-        KnownFailures.expect("TH1-1: on the history's gallery ground the steepest clear exaggeration moved", "48.00") {
-            if (kotlin.math.abs(declared - steepestClear) > EXAGGERATION_SWEEP_STEP / 2) {
+        // Recorded again at TH1-2, on whose gallery ground the first exaggeration swept already pins
+        // a face of the cone, so no steepest clear one is found (NaN, which the clause as written
+        // let pass): the ground the replay dissects is steeper in its tail (docs/DESIGN_LEDGER.md,
+        // TH1-2; docs/TODO.md, "The drawing's calibrated figures moved with the ground").
+        KnownFailures.expect("TH1-2: on the history's gallery ground every exaggeration swept pins a face of the cone", "NaN") {
+            if (steepestClear.isNaN() || kotlin.math.abs(declared - steepestClear) > EXAGGERATION_SWEEP_STEP / 2) {
                 throw RecordedViolation(
                     "the steepest exaggeration that pins no face of the cone is %.2f, not the declared %.4f"
                         .format(steepestClear, declared),

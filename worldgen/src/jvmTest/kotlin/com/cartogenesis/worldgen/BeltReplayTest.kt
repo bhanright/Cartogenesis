@@ -25,9 +25,9 @@ class BeltReplayTest {
 
     /**
      * What the rivers cut leaves the belts at their outlets, into the sea or onto the ground beyond
-     * them; the metres each cell lost, summed over the cells, are the rivers' cut and the slopes'
+     * them; the meters each cell lost, summed over the cells, are the rivers' cut and the slopes'
      * share; and what the slopes shed beside the belts is booked as laid there. Every term is summed
-     * in double precision from the same float metres, so the books close to the rounding of a sum of
+     * in double precision from the same float meters, so the books close to the rounding of a sum of
      * a few hundred thousand floats, [CLOSING_TOLERANCE] of the cut.
      */
     @Test
@@ -35,24 +35,24 @@ class BeltReplayTest {
         val config = WorldGenConfig.forRows(SEED, ROWS)
         val plates = platesOf(config)
         val replay = replayOf(config, plates)
-        val exported = replay.exportedToSeaCubicMetres + replay.exportedToLandCubicMetres
-        val gap = abs(replay.cutCubicMetres - exported) / replay.cutCubicMetres
+        val exported = replay.exportedToSeaCubicMeters + replay.exportedToLandCubicMeters
+        val gap = abs(replay.cutCubicMeters - exported) / replay.cutCubicMeters
         println(
             ("REPLAY seed %d at %d rows: %d rounds over %d belt cells; uplift %.4g km3, rivers cut %.4g km3, to the sea %.4g," +
                 " onto the land beyond %.4g, shed beside by the slopes %.4g; the rivers' books close to %.2e")
                 .format(
-                    Locale.ROOT, SEED, ROWS, replay.rounds, replay.beltCells, replay.upliftedCubicMetres / 1e9, replay.cutCubicMetres / 1e9,
-                    replay.exportedToSeaCubicMetres / 1e9, replay.exportedToLandCubicMetres / 1e9, replay.shedBesideCubicMetres / 1e9, gap
+                    Locale.ROOT, SEED, ROWS, replay.rounds, replay.beltCells, replay.upliftedCubicMeters / 1e9, replay.cutCubicMeters / 1e9,
+                    replay.exportedToSeaCubicMeters / 1e9, replay.exportedToLandCubicMeters / 1e9, replay.shedBesideCubicMeters / 1e9, gap
                 )
         )
-        assertTrue("the replay ran no rounds on seed $SEED", replay.rounds > 0 && replay.cutCubicMetres > 0.0)
-        assertTrue("what the rivers cut, ${replay.cutCubicMetres} m3, is not what left the belts, $exported", gap <= CLOSING_TOLERANCE)
+        assertTrue("the replay ran no rounds on seed $SEED", replay.rounds > 0 && replay.cutCubicMeters > 0.0)
+        assertTrue("what the rivers cut, ${replay.cutCubicMeters} m3, is not what left the belts, $exported", gap <= CLOSING_TOLERANCE)
     }
 
     /**
      * The replay at its own step, at half and at a quarter, over the same window: the rounds' years
      * halved and their count doubled, so the stream-power law's implicit step and the slopes' sweeps
-     * a year are the same law at a finer step. The eroded metres, cell by cell, change less from the
+     * a year are the same law at a finer step. The eroded meters, cell by cell, change less from the
      * half to the quarter than from the whole to the half: the scheme converges. Braun and Willett's
      * update is implicit Euler, first order, so the change should halve as the step does; the bar
      * asks for it to fall at least by a quarter, and the finest change to stay under [CONVERGED_SHARE]
@@ -68,8 +68,8 @@ class BeltReplayTest {
                 erosion = config.erosion.copy(hydraulicRounds = config.erosion.hydraulicRounds * split)
             )
             val replay = replayOf(stepped, plates)
-            println("REPLAY step 1/%d: %d rounds, rivers cut %.4g km3, slopes shed %.4g km3".format(Locale.ROOT, split, replay.rounds, replay.cutCubicMetres / 1e9, replay.shedBesideCubicMetres / 1e9))
-            replay.erodedMetres
+            println("REPLAY step 1/%d: %d rounds, rivers cut %.4g km3, slopes shed %.4g km3".format(Locale.ROOT, split, replay.rounds, replay.cutCubicMeters / 1e9, replay.shedBesideCubicMeters / 1e9))
+            replay.erodedMeters
         }
         val mean = eroded.last().average()
         fun change(a: FloatArray, b: FloatArray): Double = a.indices.sumOf { abs((a[it] - b[it]).toDouble()) } / a.size
@@ -99,7 +99,7 @@ class BeltReplayTest {
         const val ROWS = 256
         const val RAIN_MM = 1_000f
 
-        /** A double sum of float metres: some 2^-24 of each of a few hundred thousand terms, far under a part in a million of the whole. */
+        /** A double sum of float meters: some 2^-24 of each of a few hundred thousand terms, far under a part in a million of the whole. */
         const val CLOSING_TOLERANCE = 1e-6
 
         /** First order halves the change as the step halves; the bar asks for at least a quarter's fall. */

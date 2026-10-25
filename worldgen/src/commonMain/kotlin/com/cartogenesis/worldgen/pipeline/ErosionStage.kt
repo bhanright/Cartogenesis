@@ -23,7 +23,7 @@ data class ErosionResult(
 
 /**
  * What the plate stage hands the erosion beside the ground: [upliftRateMmPerYear], how fast the rock
- * is rising under each cell now, millimetres a year; [rockErodibility], a factor on bedrock K per
+ * is rising under each cell now, millimeters a year; [rockErodibility], a factor on bedrock K per
  * cell, or null for one rock everywhere; and [window], the belts' recent history for the rounds to
  * replay before their own ([BeltErosion]), or null to run no replay.
  */

@@ -15,9 +15,9 @@ import kotlin.math.sqrt
  * drawn with. Built by `PlateStage` from the crust read onto the map.
  *
  * [strikeEastEast], [strikeEastNorth] and [strikeNorthNorth] are the orogenic excess's gradient
- * tensor in each cell's east and north ([CrustOnMap]); [ridgeAmplitudeMetres] is the standard
- * deviation the ridges along strike carry there and [provinceAmplitudeMetres] the cell-mean relief a
- * province of sub-cell ranges carries, metres, nothing where there is none; [softness] is how weak
+ * tensor in each cell's east and north ([CrustOnMap]); [ridgeAmplitudeMeters] is the standard
+ * deviation the ridges along strike carry there and [provinceAmplitudeMeters] the cell-mean relief a
+ * province of sub-cell ranges carries, meters, nothing where there is none; [softness] is how weak
  * the rock is, 0 a craton's crystalline basement to 1 the weakest a belt's rocks come, and
  * [weakZoneKm] how far the cell is from a terrane boundary, km, negative where there is none.
  */
@@ -29,8 +29,8 @@ class BeltFieldInputs internal constructor(
     val strikeEastEast: FloatArray,
     val strikeEastNorth: FloatArray,
     val strikeNorthNorth: FloatArray,
-    val ridgeAmplitudeMetres: FloatArray,
-    val provinceAmplitudeMetres: FloatArray,
+    val ridgeAmplitudeMeters: FloatArray,
+    val provinceAmplitudeMeters: FloatArray,
     val softness: FloatArray,
     val weakZoneKm: FloatArray,
     /** The ridges' two octaves' wavelengths, km, longest first, and each octave's share of the amplitude. */
@@ -47,8 +47,8 @@ class BeltFieldInputs internal constructor(
     val erodibilityBandFactor: Double
 )
 
-/** What the belts' map pass writes, one entry per map cell: ridge and province relief, metres, and the rock's erodibility factor. */
-class BeltFieldOutputs(val ridgeMetres: FloatArray, val provinceMetres: FloatArray, val rockErodibility: FloatArray)
+/** What the belts' map pass writes, one entry per map cell: ridge and province relief, meters, and the rock's erodibility factor. */
+class BeltFieldOutputs(val ridgeMeters: FloatArray, val provinceMeters: FloatArray, val rockErodibility: FloatArray)
 
 /**
  * The belts' relief and rock at the map's own scale, from the crust the history left: ridges laid
@@ -89,8 +89,8 @@ internal object BeltFields {
                     val weak = if (inputs.weakZoneKm[cell] < 0f) 0.0 else exp(-inputs.weakZoneKm[cell] / inputs.weakZoneEfoldKm)
                     val softness = maxOf(inputs.softness[cell].toDouble(), weak)
                     erodibility[cell] = exp(softness * logBand).toFloat()
-                    val ridgeAmplitude = inputs.ridgeAmplitudeMetres[cell]
-                    val provinceAmplitude = inputs.provinceAmplitudeMetres[cell]
+                    val ridgeAmplitude = inputs.ridgeAmplitudeMeters[cell]
+                    val provinceAmplitude = inputs.provinceAmplitudeMeters[cell]
                     if (ridgeAmplitude <= 0f && provinceAmplitude <= 0f) continue
                     val longitude = (column + 0.5) / columns * 2.0 * PI
                     val unitX = cos(latitude) * cos(longitude)

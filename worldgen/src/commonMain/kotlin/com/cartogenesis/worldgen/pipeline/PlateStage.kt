@@ -543,7 +543,7 @@ object PlateStage {
         // The rock rising under the belts the history is still thickening: Airy's freeboard of the
         // crust added a year, the plate stage's own column (`IsostasyConfig`), where a stamped
         // feature's rate is not already larger. A kilometer of crust a million years is a
-        // millimetre a year.
+        // millimeter a year.
         val freeboardShare = config.isostasy.let { (it.mantleDensity - it.continentalCrustDensity) / it.mantleDensity }
         for (cell in 0 until cellsAcross * cellsDown) {
             val share = continentalShare.data[cell]
@@ -658,7 +658,7 @@ object PlateStage {
                     // is all there is to it, and its mean of zero is what keeps it from moving the
                     // level the crust floats at.
                     beltMetres[cell] = (uplift.data[cell] + detail) * beltReliefMetres +
-                        beltFields.ridgeMetres[cell] + beltFields.provinceMetres[cell]
+                        beltFields.ridgeMeters[cell] + beltFields.provinceMeters[cell]
                     shapeMetres[cell] = shapeNoise.data[cell] * reliefMetres + beltMetres[cell]
                 }
             }
@@ -757,7 +757,7 @@ object PlateStage {
      * The province is the Basin and Range's horsts and grabens, 24 to 32 km apart (Stewart 1971,
      * abstract), finer than a cell: drawn at [PROVINCE_NYQUIST_CELLS] cells, the finest wavelength the
      * grid draws without aliasing, with the relief a cell's mean keeps of ranges standing
-     * [PROVINCE_RANGE_RELIEF_METRES] over their basins ([BeltFields.cellMeanShare]), fading as the
+     * [PROVINCE_RANGE_RELIEF_METERS] over their basins ([BeltFields.cellMeanShare]), fading as the
      * stretching ages, as an orogen's excess does.
      *
      * The softness: a craton's crystalline basement nothing; an arc's volcanics, a rift's or a
@@ -786,7 +786,7 @@ object PlateStage {
         val cellKm = sqrt(config.cellWidthKm * config.cellHeightKm)
         val provinceWavelengthKm = maxOf(PROVINCE_RANGE_SPACING_KM, PROVINCE_NYQUIST_CELLS * cellKm)
         // A sinusoid's standard deviation is its amplitude over root two, half the relief it spans.
-        val provinceStandardMetres = (PROVINCE_RANGE_RELIEF_METRES / 2.0 / sqrt(2.0) *
+        val provinceStandardMeters = (PROVINCE_RANGE_RELIEF_METERS / 2.0 / sqrt(2.0) *
             BeltFields.cellMeanShare(PROVINCE_RANGE_SPACING_KM, cellKm)).toFloat()
         for (cell in 0 until cells) {
             val share = continentalShare[cell]
@@ -796,7 +796,7 @@ object PlateStage {
             if (share > 0f) {
                 val inherited = (crust.excessKm[cell] * (1f - stampedShare[cell]) / excessForFullOrogen).coerceIn(0f, 1f)
                 ridgeAmplitude[cell] = tectonics.orogenReliefStandardDeviationMetres * inherited * share
-                if (kind == OrogenyKind.BACK_ARC_EXTENSION.ordinal) provinceAmplitude[cell] = provinceStandardMetres * fading * share
+                if (kind == OrogenyKind.BACK_ARC_EXTENSION.ordinal) provinceAmplitude[cell] = provinceStandardMeters * fading * share
             }
             val young = when (kind) {
                 OrogenyKind.NONE.ordinal -> if (share >= 0.5f) 0f else 1f
@@ -813,8 +813,8 @@ object PlateStage {
             strikeEastEast = crust.strikeEastEast,
             strikeEastNorth = crust.strikeEastNorth,
             strikeNorthNorth = crust.strikeNorthNorth,
-            ridgeAmplitudeMetres = ridgeAmplitude,
-            provinceAmplitudeMetres = provinceAmplitude,
+            ridgeAmplitudeMeters = ridgeAmplitude,
+            provinceAmplitudeMeters = provinceAmplitude,
             softness = softness,
             weakZoneKm = terraneBoundaryKm(config, crust.terrane, continentalShare),
             ridgeWavelengthsKm = doubleArrayOf(RIDGE_LONGEST_WAVELENGTH_KM, RIDGE_LONGEST_WAVELENGTH_KM / 2),
@@ -889,7 +889,7 @@ object PlateStage {
      * How high the Basin and Range's ranges stand over their basins, m: 900 to 1,500 m, 3,000 to
      * 5,000 ft (Encyclopaedia Britannica, *Basin and Range Province*): the middle.
      */
-    private const val PROVINCE_RANGE_RELIEF_METRES = 1_200.0
+    private const val PROVINCE_RANGE_RELIEF_METERS = 1_200.0
 
     /** The finest wavelength a grid draws without aliasing it into a coarser one, in cells: three. */
     private const val PROVINCE_NYQUIST_CELLS = 3.0

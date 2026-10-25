@@ -23,25 +23,25 @@ class BeltWindow(
 )
 
 /**
- * What the replay did, in cubic metres of rock, and where the rock went; and the metres each cell
+ * What the replay did, in cubic meters of rock, and where the rock went; and the meters each cell
  * lost, for the guards that ask how much of a belt's relief survived.
  *
  * The books close: what the rivers cut leaves the belts at their outlets, into the sea or onto the
- * land beyond them, where the foreland's own rivers take it on ([exportedToSeaCubicMetres],
- * [exportedToLandCubicMetres], the second with what a hollow inside a belt holds); what the
- * hillslopes shed onto the ground beside the belts stays there ([shedBesideCubicMetres]). The
+ * land beyond them, where the foreland's own rivers take it on ([exportedToSeaCubicMeters],
+ * [exportedToLandCubicMeters], the second with what a hollow inside a belt holds); what the
+ * hillslopes shed onto the ground beside the belts stays there ([shedBesideCubicMeters]). The
  * replay cuts rock and lays none: the rounds that follow it lay the spoil of their own four million
  * years.
  */
 internal class BeltReplay(
     val rounds: Int,
     val beltCells: Int,
-    val upliftedCubicMetres: Double,
-    val cutCubicMetres: Double,
-    val exportedToSeaCubicMetres: Double,
-    val exportedToLandCubicMetres: Double,
-    val shedBesideCubicMetres: Double,
-    val erodedMetres: FloatArray
+    val upliftedCubicMeters: Double,
+    val cutCubicMeters: Double,
+    val exportedToSeaCubicMeters: Double,
+    val exportedToLandCubicMeters: Double,
+    val shedBesideCubicMeters: Double,
+    val erodedMeters: FloatArray
 ) {
     companion object {
         val NOTHING = BeltReplay(0, 0, 0.0, 0.0, 0.0, 0.0, 0.0, FloatArray(0))
@@ -117,8 +117,8 @@ internal object BeltErosion {
         if (rounds <= 0 || erosion.hydraulicRounds <= 0 || erosion.bedrockErodibilityPerYear <= 0f) return BeltReplay.NOTHING
 
         val isostasy = config.isostasy
-        val freeboardMetresPerKm = (isostasy.mantleDensity - isostasy.continentalCrustDensity) / isostasy.mantleDensity * METRES_PER_KM
-        val metresPerFieldUnit = scale.reliefSpanMetres
+        val freeboardMetersPerKm = (isostasy.mantleDensity - isostasy.continentalCrustDensity) / isostasy.mantleDensity * METERS_PER_KM
+        val metersPerFieldUnit = scale.reliefSpanMetres
         val tectonic = window.tectonicKm.data
         val wear = window.wearKm.data
         val onset = window.onsetMyrAgo.data
@@ -133,13 +133,13 @@ internal object BeltErosion {
         val firstRound = IntArray(beltCells)
         for (local in 0 until beltCells) {
             val cell = belt[local]
-            surface[cell] -= freeboardMetresPerKm * (tectonic[cell] - wear[cell]) / metresPerFieldUnit
-            val roundsShare = if (presentUpliftMmPerYear == null) 0.0 else presentUpliftMmPerYear[cell] * erosion.hydraulicRounds * roundYears / MILLIMETRES_PER_METRE
-            val riseMetres = freeboardMetresPerKm * tectonic[cell] - roundsShare
+            surface[cell] -= freeboardMetersPerKm * (tectonic[cell] - wear[cell]) / metersPerFieldUnit
+            val roundsShare = if (presentUpliftMmPerYear == null) 0.0 else presentUpliftMmPerYear[cell] * erosion.hydraulicRounds * roundYears / MILLIMETERS_PER_METER
+            val riseMeters = freeboardMetersPerKm * tectonic[cell] - roundsShare
             // The first round whose start is no earlier than the onset, counted from the window's start.
             val first = ceil((windowMyr - onset[cell]) / roundMyr - ROUND_ROUNDING).toInt().coerceIn(0, rounds - 1)
             firstRound[local] = first
-            risePerRoundField[local] = (riseMetres / (rounds - first) / metresPerFieldUnit).toFloat()
+            risePerRoundField[local] = (riseMeters / (rounds - first) / metersPerFieldUnit).toFloat()
         }
 
         // The sea the belts' rivers reach, cut once on the ground as the window opens.
@@ -196,7 +196,7 @@ internal object BeltErosion {
 
         val rates = HydraulicErosion.Rates(config)
         val steps = GroundSteps(config.cellHeightInCellWidths)
-        val pondDepthField = HydraulicErosion.POND_DEPTH_METRES / metresPerFieldUnit
+        val pondDepthField = HydraulicErosion.POND_DEPTH_METRES / metersPerFieldUnit
         val sweepsPerRound = (ErosionStage.sweepsFor(config) / erosion.hydraulicRounds.coerceAtLeast(1)).coerceAtLeast(1)
         val limits = ErosionStage.thermalLimits(config)
         // The courant coefficient is set for the shoreline-relative field the rounds route on; here
@@ -210,16 +210,16 @@ internal object BeltErosion {
         val flux = DoubleArray(beltCells)
         val donors = IntArray(beltCells)
         val runOrder = IntArray(beltCells)
-        val erodedMetres = FloatArray(cellCount)
+        val erodedMeters = FloatArray(cellCount)
         val visited = BooleanArray(beltCells)
         val heap = LongMinHeap(beltCells.coerceAtLeast(16))
-        val cellAreaM2 = config.squareKilometresPerCell * SQUARE_METRES_PER_KM2
+        val cellAreaM2 = config.squareKilometresPerCell * SQUARE_METERS_PER_KM2
 
         val rebounding = isostasy.enabled
         val reference = if (rebounding) surface.copyOf() else FloatArray(0)
-        val upliftedMetres = if (rebounding) FloatArray(cellCount) else FloatArray(0)
-        val reboundMetres = if (rebounding) FloatArray(cellCount) else FloatArray(0)
-        val lossMetres = FloatField(cellsAcross, cellsDown)
+        val upliftedMeters = if (rebounding) FloatArray(cellCount) else FloatArray(0)
+        val reboundMeters = if (rebounding) FloatArray(cellCount) else FloatArray(0)
+        val lossMeters = FloatField(cellsAcross, cellsDown)
         val reboundShare = isostasy.continentalCrustDensity / isostasy.mantleDensity
         val crustSpreadKm = CrustMap.KERNEL_SPREAD_SPACINGS * config.tectonics.historyCellKm
 
@@ -238,8 +238,8 @@ internal object BeltErosion {
                 val rise = risePerRoundField[local]
                 val cell = belt[local]
                 surface[cell] += rise
-                if (upliftedMetres.isNotEmpty()) upliftedMetres[cell] += rise * metresPerFieldUnit
-                uplifted += rise.toDouble() * metresPerFieldUnit * cellAreaM2
+                if (upliftedMeters.isNotEmpty()) upliftedMeters[cell] += rise * metersPerFieldUnit
+                uplifted += rise.toDouble() * metersPerFieldUnit * cellAreaM2
             }
             for (cell in swept) routing[cell] = surface[cell].toDouble()
 
@@ -337,10 +337,10 @@ internal object BeltErosion {
                 val courantNumber = courant * sqrt(share) * factor[cell] / steps.between(cell, down, cellsAcross)
                 val after = (base + (height - base).toDouble() / (1.0 + courantNumber)).toFloat()
                 surface[cell] = after
-                val lostMetres = (height - after) * metresPerFieldUnit
-                erodedMetres[cell] += lostMetres
-                cut += lostMetres.toDouble() * cellAreaM2
-                flux[local] += lostMetres.toDouble() * cellAreaM2
+                val lostMeters = (height - after) * metersPerFieldUnit
+                erodedMeters[cell] += lostMeters
+                cut += lostMeters.toDouble() * cellAreaM2
+                flux[local] += lostMeters.toDouble() * cellAreaM2
             }
             // The spoil carried down to where it leaves the belts, or to the hollow or the sea inside
             // one that holds it.
@@ -397,7 +397,7 @@ internal object BeltErosion {
                 }
                 for (index in swept.indices) {
                     val cell = swept[index]
-                    if (localOf[cell] < 0) shed += (next[index] - surface[cell]).toDouble() * metresPerFieldUnit * cellAreaM2
+                    if (localOf[cell] < 0) shed += (next[index] - surface[cell]).toDouble() * metersPerFieldUnit * cellAreaM2
                     surface[cell] = next[index]
                 }
             }
@@ -407,17 +407,17 @@ internal object BeltErosion {
             // the crust's share of the mantle's density.
             if (rebounding && ((round + 1) % REBOUND_ROUNDS == 0 || round == rounds - 1)) {
                 for (cell in 0 until cellCount) {
-                    lossMetres.data[cell] = upliftedMetres[cell] + reboundMetres[cell] - (surface[cell] - reference[cell]) * metresPerFieldUnit
+                    lossMeters.data[cell] = upliftedMeters[cell] + reboundMeters[cell] - (surface[cell] - reference[cell]) * metersPerFieldUnit
                 }
-                GaussianBlur.apply(lossMetres, crustSpreadKm / config.cellWidthKm, crustSpreadKm / config.cellHeightKm)
+                GaussianBlur.apply(lossMeters, crustSpreadKm / config.cellWidthKm, crustSpreadKm / config.cellHeightKm)
                 for (cell in 0 until cellCount) {
-                    val rebound = reboundShare * lossMetres.data[cell]
-                    surface[cell] += (rebound - reboundMetres[cell]) / metresPerFieldUnit
-                    reboundMetres[cell] = rebound
+                    val rebound = reboundShare * lossMeters.data[cell]
+                    surface[cell] += (rebound - reboundMeters[cell]) / metersPerFieldUnit
+                    reboundMeters[cell] = rebound
                 }
             }
         }
-        return BeltReplay(rounds, beltCells, uplifted, cut, toSea, toLand, shed, erodedMetres)
+        return BeltReplay(rounds, beltCells, uplifted, cut, toSea, toLand, shed, erodedMeters)
     }
 
     /** Each of the eight neighbors of [cell], wrapping east-west and stopping at the poles. */
@@ -476,7 +476,7 @@ internal object BeltErosion {
     /** Rounding only, so a window a whole number of rounds long counts all of them. */
     private const val ROUND_ROUNDING = 1e-9
 
-    private const val METRES_PER_KM = 1_000f
-    private const val MILLIMETRES_PER_METRE = 1_000.0
-    private const val SQUARE_METRES_PER_KM2 = 1e6
+    private const val METERS_PER_KM = 1_000f
+    private const val MILLIMETERS_PER_METER = 1_000.0
+    private const val SQUARE_METERS_PER_KM2 = 1e6
 }

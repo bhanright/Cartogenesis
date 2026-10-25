@@ -51,7 +51,7 @@ class MountainRangesTest : BorrowsSharedWorlds() {
         var landKm2 = 0.0
         for (seed in SharedWorlds.STANDARD_SEEDS) {
             val world = worldOf(seed)
-            val lengths = RangeInstrument.axisLengthsKm(world, RangeInstrument.YOUNG_THRESHOLD_METRES)
+            val lengths = RangeInstrument.axisLengthsKm(world, RangeInstrument.YOUNG_THRESHOLD_METERS)
             length += lengths.sum()
             count += lengths.size
             landKm2 += landAreaKm2(world)
@@ -94,7 +94,7 @@ class MountainRangesTest : BorrowsSharedWorlds() {
                 elevation[row * width + column] = if (inSpan) 3_000.0 * kotlin.math.exp(-(acrossKm / 250.0).let { it * it }) else 200.0
             }
         }
-        val ranges = RangeInstrument.axes(width, height, config.cellWidthKm, config.cellHeightKm, elevation, land, RangeInstrument.YOUNG_THRESHOLD_METRES)
+        val ranges = RangeInstrument.axes(width, height, config.cellWidthKm, config.cellHeightKm, elevation, land, RangeInstrument.YOUNG_THRESHOLD_METERS)
             .map { axis ->
                 RangeInstrument.figures(
                     RangeInstrument.swath(width, height, config.cellWidthKm, config.cellHeightKm, elevation, land, axis),

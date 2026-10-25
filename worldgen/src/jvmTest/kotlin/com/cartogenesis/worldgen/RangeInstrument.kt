@@ -16,8 +16,8 @@ import kotlin.math.sqrt
  * the same way on any world, and stratified by the belt's kind and age (docs/DESIGN_LEDGER.md,
  * TH1-2).
  *
- * A range's axis: the land's elevation smoothed over [SMOOTHING_KM], above [YOUNG_THRESHOLD_METRES]
- * (an old belt's own [OLD_THRESHOLD_METRES]: the young threshold misses old low belts), thinned to
+ * A range's axis: the land's elevation smoothed over [SMOOTHING_KM], above [YOUNG_THRESHOLD_METERS]
+ * (an old belt's own [OLD_THRESHOLD_METERS]: the young threshold misses old low belts), thinned to
  * its skeleton (Zhang and Suen), the skeleton's longest path of at least [SHORTEST_RANGE_KM]. At
  * every cell along the axis a line across it of [HALF_SWATH_KM] either way is read, and the
  * figures come from those lines: the crest's spread, the crest zone's dissection, the width's
@@ -30,15 +30,15 @@ import kotlin.math.sqrt
 internal object RangeInstrument {
 
     const val SMOOTHING_KM = 60.0
-    const val YOUNG_THRESHOLD_METRES = 1_500.0
+    const val YOUNG_THRESHOLD_METERS = 1_500.0
 
     /**
-     * An old belt's threshold, metres: Earth's Appalachians crest at a mean of 592 m in the curated
+     * An old belt's threshold, meters: Earth's Appalachians crest at a mean of 592 m in the curated
      * table (`measures.tsv`, GMRT), under the young threshold almost everywhere, and stand at 500
      * to 1,000 m over most of their length; 500 m finds them and their kin without taking in the
      * cratons' plateaus, which stand lower once smoothed over 60 km.
      */
-    const val OLD_THRESHOLD_METRES = 500.0
+    const val OLD_THRESHOLD_METERS = 500.0
     const val SHORTEST_RANGE_KM = 800.0
     const val HALF_SWATH_KM = 200.0
 
@@ -111,8 +111,8 @@ internal object RangeInstrument {
         return Pooled(ranges.size, length, values)
     }
 
-    /** The world's land elevation, metres: above the shoreline on land, below it at sea. */
-    fun elevationMetres(world: WorldMap): DoubleArray {
+    /** The world's land elevation, meters: above the shoreline on land, below it at sea. */
+    fun elevationMeters(world: WorldMap): DoubleArray {
         val scale = world.config.scale
         val relative = world.sea.relativeElevation.data
         val land = world.sea.isLand
@@ -128,10 +128,10 @@ internal object RangeInstrument {
         val height = config.height
         val cellWidthKm = config.cellWidthKm
         val cellHeightKm = config.cellHeightKm
-        val elevation = elevationMetres(world)
+        val elevation = elevationMeters(world)
         val land = world.sea.isLand
         val found = ArrayList<Range>()
-        for ((threshold, oldOnly) in listOf(YOUNG_THRESHOLD_METRES to false, OLD_THRESHOLD_METRES to true)) {
+        for ((threshold, oldOnly) in listOf(YOUNG_THRESHOLD_METERS to false, OLD_THRESHOLD_METERS to true)) {
             for (axis in axes(width, height, cellWidthKm, cellHeightKm, elevation, land, threshold)) {
                 val stratum = stratumOf(world, axis)
                 if (oldOnly != (stratum == Stratum.OLD)) continue
@@ -144,14 +144,14 @@ internal object RangeInstrument {
     }
 
     /**
-     * The length of every range axis found at [thresholdMetres] on [world], km, whatever its stratum:
+     * The length of every range axis found at [thresholdMeters] on [world], km, whatever its stratum:
      * what Earth's own reading counts, its ranges having no stratum. A station a cell, as the swath
      * reads them, so a length here is the instrument's `lengthKm` on Earth.
      */
-    fun axisLengthsKm(world: WorldMap, thresholdMetres: Double): List<Double> {
+    fun axisLengthsKm(world: WorldMap, thresholdMeters: Double): List<Double> {
         val config = world.config
-        val elevation = elevationMetres(world)
-        return axes(config.width, config.height, config.cellWidthKm, config.cellHeightKm, elevation, world.sea.isLand, thresholdMetres)
+        val elevation = elevationMeters(world)
+        return axes(config.width, config.height, config.cellWidthKm, config.cellHeightKm, elevation, world.sea.isLand, thresholdMeters)
             .map { axis -> axis.size * config.cellWidthKm }
     }
 
@@ -415,7 +415,7 @@ internal object RangeInstrument {
         // The width at half the crest, along strike.
         val widths = swath.map { row ->
             val top = row.filter { it.isFinite() }.maxOrNull() ?: Double.NaN
-            row.count { (if (it.isFinite()) it else MISSING_METRES) >= 0.5 * top } * stepKm
+            row.count { (if (it.isFinite()) it else MISSING_METERS) >= 0.5 * top } * stepKm
         }
         val widthMean = widths.average()
         val widthCv = sqrt(widths.sumOf { (it - widthMean) * (it - widthMean) } / widths.size) / widthMean
@@ -423,7 +423,7 @@ internal object RangeInstrument {
         val massifThreshold = MASSIF_SHARE * p90
         val stations = swath.size
         val offsets = swath[0].size
-        val high = BooleanArray(stations * offsets) { val value = swath[it / offsets][it % offsets]; (if (value.isFinite()) value else MISSING_METRES) >= massifThreshold }
+        val high = BooleanArray(stations * offsets) { val value = swath[it / offsets][it % offsets]; (if (value.isFinite()) value else MISSING_METERS) >= massifThreshold }
         val massifs = stripComponents(high, stations, offsets)
         // The crest zone's dissection: within 80 km of each station's crest, the share under 60% of it.
         val zone = max(1, pythonRound(CREST_ZONE_KM / stepKm))
@@ -458,20 +458,20 @@ internal object RangeInstrument {
         )
     }
 
-    /** `crest.ranges_across`: crests on a line of at least [PROMINENCE_METRES] over the higher of their two saddles, standing over 200 m. */
+    /** `crest.ranges_across`: crests on a line of at least [PROMINENCE_METERS] over the higher of their two saddles, standing over 200 m. */
     fun rangesAcross(row: DoubleArray): Int {
-        val v = DoubleArray(row.size) { if (row[it].isFinite()) row[it] else MISSING_METRES }
+        val v = DoubleArray(row.size) { if (row[it].isFinite()) row[it] else MISSING_METERS }
         val n = v.size
         var count = 0
         for (i in 0 until n) {
-            if ((i > 0 && v[i - 1] > v[i]) || (i < n - 1 && v[i + 1] > v[i]) || v[i] < LOWEST_CREST_METRES) continue
+            if ((i > 0 && v[i - 1] > v[i]) || (i < n - 1 && v[i + 1] > v[i]) || v[i] < LOWEST_CREST_METERS) continue
             var lowLeft = v[i]
             var j = i - 1
             while (j >= 0 && v[j] <= v[i]) { lowLeft = min(lowLeft, v[j]); j-- }
             var lowRight = v[i]
             j = i + 1
             while (j < n && v[j] <= v[i]) { lowRight = min(lowRight, v[j]); j++ }
-            if (v[i] - max(lowLeft, lowRight) >= PROMINENCE_METRES) count++
+            if (v[i] - max(lowLeft, lowRight) >= PROMINENCE_METERS) count++
         }
         return count
     }
@@ -527,7 +527,7 @@ internal object RangeInstrument {
     private const val MASSIF_SHARE = 0.75
     private const val CREST_ZONE_KM = 80.0
     private const val CREST_ZONE_LOW_SHARE = 0.6
-    private const val PROMINENCE_METRES = 500.0
-    private const val LOWEST_CREST_METRES = 200.0
-    private const val MISSING_METRES = -1e4
+    private const val PROMINENCE_METERS = 500.0
+    private const val LOWEST_CREST_METERS = 200.0
+    private const val MISSING_METERS = -1e4
 }

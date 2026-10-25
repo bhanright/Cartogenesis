@@ -987,13 +987,13 @@ class IsostasyTest : BorrowsSharedWorlds() {
                 deepestMoat = down
             }
         }
-        val realised = if (thicknessThere > 0f) deepestUnderIce / thicknessThere else 0.0
+        val realized = if (thicknessThere > 0f) deepestUnderIce / thicknessThere else 0.0
         println(
             ("ISOSTASY ice seed %d: %d cells pressed down; the bed under the cap's %d interior" +
                 " cells deepest by %.0f m under %.0f m of ice, a ratio of %.3f against Airy's" +
                 " %.3f; the moat deepest by %.0f m against the %.0f m the thickest ice floats out")
                 .format(
-                    seed, moved, interiorCells, deepestUnderIce, thicknessThere, realised,
+                    seed, moved, interiorCells, deepestUnderIce, thicknessThere, realized,
                     airyRatio, deepestMoat, thickest * airyRatio
                 )
         )
@@ -1012,11 +1012,11 @@ class IsostasyTest : BorrowsSharedWorlds() {
         run {
             assertTrue(
                 "the bed under the cap sank ${"%.0f".format(deepestUnderIce)} m under" +
-                    " ${"%.0f".format(thicknessThere)} m of ice, a ratio of ${"%.3f".format(realised)}," +
+                    " ${"%.0f".format(thicknessThere)} m of ice, a ratio of ${"%.3f".format(realized)}," +
                     " which is not between ${"%.3f".format(airyRatio * CAP_SHARE_OF_AIRY_FLOOR)} and" +
                     " ${"%.3f".format(airyRatio)} - Airy's `iceDensity / mantleDensity` and the share" +
                     " of it a plate of this stiffness lets through",
-                realised in (airyRatio * CAP_SHARE_OF_AIRY_FLOOR)..airyRatio.toDouble()
+                realized in (airyRatio * CAP_SHARE_OF_AIRY_FLOOR)..airyRatio.toDouble()
             )
         }
         // Recorded at K2 at 69 m of 433, and armed again at H1 at 62 m of 239: the moat is about as

@@ -168,8 +168,8 @@ class GpuCrustMap private constructor(override val name: String) : CrustMapAccel
             cellFloats[f] = inputs.strikeEastEast[cell]
             cellFloats[f + 1] = inputs.strikeEastNorth[cell]
             cellFloats[f + 2] = inputs.strikeNorthNorth[cell]
-            cellFloats[f + 3] = inputs.ridgeAmplitudeMetres[cell]
-            cellFloats[f + 4] = inputs.provinceAmplitudeMetres[cell]
+            cellFloats[f + 3] = inputs.ridgeAmplitudeMeters[cell]
+            cellFloats[f + 4] = inputs.provinceAmplitudeMeters[cell]
             cellFloats[f + 5] = inputs.softness[cell]
             cellFloats[f + 6] = inputs.weakZoneKm[cell]
         }
@@ -211,8 +211,8 @@ class GpuCrustMap private constructor(override val name: String) : CrustMapAccel
                 GL43C.glGetBufferSubData(GL43C.GL_SHADER_STORAGE_BUFFER, 0L, out)
                 if (GL43C.glGetError() != GL43C.GL_NO_ERROR) return@run null
                 BeltFieldOutputs(
-                    ridgeMetres = FloatArray(cells) { out[it * BELT_OUT_FLOATS] },
-                    provinceMetres = FloatArray(cells) { out[it * BELT_OUT_FLOATS + 1] },
+                    ridgeMeters = FloatArray(cells) { out[it * BELT_OUT_FLOATS] },
+                    provinceMeters = FloatArray(cells) { out[it * BELT_OUT_FLOATS + 1] },
                     rockErodibility = FloatArray(cells) { out[it * BELT_OUT_FLOATS + 2] }
                 )
             } finally {

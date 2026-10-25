@@ -52,7 +52,7 @@ class BeltFieldsParity private constructor(private val inputs: BeltFieldInputs, 
     }
 
     fun compare(device: BeltFieldOutputs): Gap {
-        val cells = reference.ridgeMetres.size
+        val cells = reference.ridgeMeters.size
         val roundingBar = roundingBar()
         var ridgeWorst = 0.0
         var provinceWorst = 0.0
@@ -64,18 +64,18 @@ class BeltFieldsParity private constructor(private val inputs: BeltFieldInputs, 
                 erodibilityWorst,
                 abs((device.rockErodibility[cell] - reference.rockErodibility[cell]).toDouble()) / reference.rockErodibility[cell]
             )
-            val ridgeAmplitude = inputs.ridgeAmplitudeMetres[cell].toDouble()
-            val provinceAmplitude = inputs.provinceAmplitudeMetres[cell].toDouble()
+            val ridgeAmplitude = inputs.ridgeAmplitudeMeters[cell].toDouble()
+            val provinceAmplitude = inputs.provinceAmplitudeMeters[cell].toDouble()
             if (ridgeAmplitude <= 0.0 && provinceAmplitude <= 0.0) continue
             withRelief++
             var cellOff = false
             if (ridgeAmplitude > 0.0) {
-                val share = abs((device.ridgeMetres[cell] - reference.ridgeMetres[cell]).toDouble()) / ridgeAmplitude
+                val share = abs((device.ridgeMeters[cell] - reference.ridgeMeters[cell]).toDouble()) / ridgeAmplitude
                 ridgeWorst = max(ridgeWorst, share)
                 if (share > roundingBar) cellOff = true
             }
             if (provinceAmplitude > 0.0) {
-                val share = abs((device.provinceMetres[cell] - reference.provinceMetres[cell]).toDouble()) / provinceAmplitude
+                val share = abs((device.provinceMeters[cell] - reference.provinceMeters[cell]).toDouble()) / provinceAmplitude
                 provinceWorst = max(provinceWorst, share)
                 if (share > roundingBar) cellOff = true
             }

@@ -599,7 +599,7 @@ internal object HydraulicErosion {
         provisionalSeaLevel: Float,
         /**
          * What the plate stage hands the erosion beside the ground: how fast the rock is rising
-         * under each cell, in millimetres a year, its erodibility, and the belts' recent history to
+         * under each cell, in millimeters a year, its erodibility, and the belts' recent history to
          * replay ([ErosionTectonics.of]); or null where a caller wants the rounds without the
          * tectonics, which is the control the uplift guards are shown to fail against.
          */

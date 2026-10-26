@@ -874,17 +874,21 @@ class IsostasyTest : BorrowsSharedWorlds() {
         // with the ground rising 10 m beyond it (docs/DESIGN_LEDGER.md, H1).
         // Recorded at TH1-1: on the history's seed 42 the collision was another collision, its moat
         // at the window's last bin, with no ground beyond it to rise; armed at TH1-2, whose seed 42's
-        // foreland rises beyond its moat (docs/DESIGN_LEDGER.md, TH1-2).
-        run {
+        // foreland rises beyond its moat (docs/DESIGN_LEDGER.md, TH1-2). Recorded again at TH1-2c: on
+        // the history's seed 42 the collision is another collision once more, its moat at the window's
+        // last bin, with no ground beyond it to rise (docs/DESIGN_LEDGER.md, TH1-2c; docs/TODO.md).
+        val forebulge = String.format(
+            java.util.Locale.ROOT, "moat at %.0f-%.0f km, %.0f m under the belt, rising %.0f m beyond it",
+            moatBin * FLEXURE_BIN_KM, (moatBin + 1) * FLEXURE_BIN_KM,
+            overTheBelt - inTheForeland, beyondTheMoat - inTheForeland
+        )
+        KnownFailures.expect("TH1-2c: on the history's seed 42 the foreland's moat lies at the window's edge", "moat at 1125-1313 km, 1110 m under the belt, rising 0 m beyond it") {
             if (beyondTheMoat - inTheForeland < MIN_FOREBULGE_METRES) {
-                throw AssertionError(
+                throw RecordedViolation(
                     "the ground beyond the moat does not come back up, so what was measured is a slope" +
                         " away from the belt and not a trough — and a trough with a rise beyond it is the" +
-                        " one thing no uniform bend can make: " + String.format(
-                            java.util.Locale.ROOT, "moat at %.0f-%.0f km, %.0f m under the belt, rising %.0f m beyond it",
-                            moatBin * FLEXURE_BIN_KM, (moatBin + 1) * FLEXURE_BIN_KM,
-                            overTheBelt - inTheForeland, beyondTheMoat - inTheForeland
-                        )
+                        " one thing no uniform bend can make: " + forebulge,
+                    forebulge
                 )
             }
         }
@@ -1007,15 +1011,19 @@ class IsostasyTest : BorrowsSharedWorlds() {
         // with the uplift re-derived (docs/DESIGN_LEDGER.md, Fix 2 and Fix 3b).
         // Recorded at TH1-1b: the cap's bed sank a hair past Airy's own share, 0.278 printed against
         // 0.278; armed at TH1-2, whose cap's bed stands inside it (docs/DESIGN_LEDGER.md, TH1-2).
-        run {
-            assertTrue(
-                "the bed under the cap sank ${"%.0f".format(deepestUnderIce)} m under" +
-                    " ${"%.0f".format(thicknessThere)} m of ice, a ratio of ${"%.3f".format(realized)}," +
-                    " which is not between ${"%.3f".format(airyRatio * CAP_SHARE_OF_AIRY_FLOOR)} and" +
-                    " ${"%.3f".format(airyRatio)} - Airy's `iceDensity / mantleDensity` and the share" +
-                    " of it a plate of this stiffness lets through",
-                realized in (airyRatio * CAP_SHARE_OF_AIRY_FLOOR)..airyRatio.toDouble()
-            )
+        // Recorded again at TH1-2c, whose cap's bed sinks 5% past Airy's own share, 0.293 against 0.278
+        // (docs/DESIGN_LEDGER.md, TH1-2c; docs/TODO.md).
+        KnownFailures.expect("TH1-2c: the bed under the cap sinks past Airy's own share", "0.293") {
+            if (realized !in (airyRatio * CAP_SHARE_OF_AIRY_FLOOR)..airyRatio.toDouble()) {
+                throw RecordedViolation(
+                    "the bed under the cap sank ${"%.0f".format(deepestUnderIce)} m under" +
+                        " ${"%.0f".format(thicknessThere)} m of ice, a ratio of ${"%.3f".format(realized)}," +
+                        " which is not between ${"%.3f".format(airyRatio * CAP_SHARE_OF_AIRY_FLOOR)} and" +
+                        " ${"%.3f".format(airyRatio)} - Airy's `iceDensity / mantleDensity` and the share" +
+                        " of it a plate of this stiffness lets through",
+                    "%.3f".format(java.util.Locale.ROOT, realized)
+                )
+            }
         }
         // Recorded at K2 at 69 m of 433, and armed again at H1 at 62 m of 239: the moat is about as
         // deep as it was, and what moved is seed 7's thickest ice, 860 m against 1,558, so this

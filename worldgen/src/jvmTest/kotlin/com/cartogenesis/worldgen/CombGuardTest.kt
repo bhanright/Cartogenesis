@@ -308,8 +308,14 @@ class CombGuardTest : BorrowsSharedWorlds() {
         /** How far the network may thin: `ScaleFreeTest`'s grid tolerance. */
         const val NETWORK_FACTOR = 1.35
 
-        /** The initiated network at 512 rows on Q2's head, km of channel per 1,000 km² of land, by seed. */
-        val NETWORK_ON_THE_HEAD = listOf(7L to 43.07, 42L to 49.10)
+        /**
+         * The initiated network at 512 rows on TH1-2c's head, km of channel per 1,000 km² of land,
+         * by seed. Re-taken at TH1-2c, each world's lattice being turned by its seed: seed 7's
+         * network reads 31.31, 27% under the 43.07 of the head before, and seed 42's 60.51, 23% over
+         * its 49.10; the first of those is past [NETWORK_FACTOR] of the old figure, and the two
+         * worlds moved opposite ways, where a thinning of the router would move both down.
+         */
+        val NETWORK_ON_THE_HEAD = listOf(7L to 31.31, 42L to 60.51)
 
         val WORLD_SEEDS = NETWORK_ON_THE_HEAD.map { it.first }
     }

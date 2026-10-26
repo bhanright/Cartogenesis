@@ -167,6 +167,7 @@ internal object GeometryExpectations {
         known("42/coast as drawn/CREASES", "1@(288,5)=7.060")
         known("42/terrain contours/CREASES", "1@(306,10)=8.879")
         known("42/ice occupancy/ALIGNED_SIDE", "2@(263,4)=106.0 +(121,2)")
+        known("42/ice occupancy/CREASES", "1@(316,4)=12.51")
         known("42/ice sheet ground/ALIGNED_SIDE", "2@(824,7)=43.00 +(296,4)")
         known("42/ice sheet ground/CREASES", "3@(316,4)=12.56 +(281,5)(36,20)")
         known("42/ice carving/ALIGNED_SIDE", "2@(824,7)=43.00 +(296,4)")

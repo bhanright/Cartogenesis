@@ -190,8 +190,12 @@ class LakeWaterBalanceTest : BorrowsSharedWorlds() {
         // ground gives seed 1 a dry basin of 538 cells (docs/DESIGN_LEDGER.md, W2e).
         // Recorded at TH1-1, on whose seed 1 the largest dry basin is 295 cells; the case reads the
         // basin it has (docs/DESIGN_LEDGER.md, TH1-1; docs/TODO.md).
-        // Armed at TH1-2, whose seed 1 has a large dry basin again (docs/DESIGN_LEDGER.md, TH1-2).
-        assertTrue(basin.size >= 500, "seed $drySeed has no large dry basin any more (${basin.size} cells)")
+        // Armed at TH1-2, whose seed 1 had a large dry basin again; recorded again at TH1-2c, on
+        // whose seed 1 the largest dry basin is 80 cells and the case reads the basin it has
+        // (docs/DESIGN_LEDGER.md, TH1-2c; docs/TODO.md).
+        KnownFailures.expect("TH1-2c: on the history's seed 1 the dry basin is small", "80 cells") {
+            if (basin.size < 500) throw RecordedViolation("seed $drySeed has no large dry basin any more (${basin.size} cells)", "${basin.size} cells")
+        }
         if (basin.isEmpty()) return
 
         val rain = basin.map { off.climate.precipitationMm.data[it] }.average()

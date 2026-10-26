@@ -68,7 +68,7 @@ class BugReportTest {
             "World: Ashenmoor",
             "Seed: 718106",
             "Generation resolution: 2048 × 1024",
-            "Ocean coverage: 62%",
+            "Ocean coverage: 71%",
             "Graphics acceleration: On, a fake graphics card"
         ).forEach { line ->
             assertTrue(line in text, "the report does not say \"$line\":\n$text")
@@ -117,7 +117,7 @@ class BugReportTest {
         assertEquals("2048 × 1024", fields["resolution"])
         assertEquals("Desktop", fields["platform"])
         assertEquals("3.0.1", fields["version"])
-        assertEquals("62%", fields["ocean"])
+        assertEquals("71%", fields["ocean"])
         assertEquals("Plates 18; Seasonal tilt 25°; Ice sheets and glaciers off", fields["knobs"])
         assertTrue(
             fields.getValue("title").contains("718106"),

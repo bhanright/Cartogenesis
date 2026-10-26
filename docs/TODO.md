@@ -10,7 +10,7 @@
   square-root law grew them. The next chunk changes every world and is re-recorded anyway, so it should
   fix the ordering first: the cell's graded level and the channel's must be read from the same surface.
   2026-10-26, TH1-2c.
-- **The cover clause's realised share sits 8% past its tolerance at a metre's rate (TH1-2c, recorded;
+- **The cover clause's realised share sits 8% past its tolerance at a meter's rate (TH1-2c, recorded;
   float noise, not a bias).** `ClimateFedErosionTest`, "cover on the ground holds the incision back":
   on seed 7 one cell at a law's rate of 1.07 m (the floor is 1 m) reads the realised share 1.08e-3 off
   `e(1+F)/(1+eF)` against a tolerance of 1e-3, and the clause passed at 51e6b105. Read first: over seed

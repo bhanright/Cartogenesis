@@ -169,7 +169,7 @@ object DataExports {
      * a world with more ice than any of them still fits: the highest surface the generator is
      * meant to produce is the highest ground plus the thickest ice it will draw, and that
      * thickness is capped at [IceSheet.THICKEST_ICE_ON_EARTH_METRES], Bedmap2's deepest sounding.
-     * On the stock ruler that is 6,000 metres of land plus 4,776 of ice, or 1.796 rulers; a world
+     * On the stock ruler that is 6,000 meters of land plus 4,776 of ice, or 1.796 rulers; a world
      * configured with a shorter ruler gets a proportionally taller factor, which is why this is
      * read off the world rather than written down as one number.
      *
@@ -200,7 +200,7 @@ object DataExports {
      * Read off the world because a bound has to hold for every world the generator can make, and
      * the ice cap it is derived from is not enforced by the generator, only recorded when broken.
      * A cell above the ceiling is clipped to white and cannot round-trip. Taking the larger of the
-     * two keeps the grey level the same across every world that stays inside the envelope, so
+     * two keeps the gray level the same across every world that stays inside the envelope, so
      * their files remain comparable, and spends precision only on a world that needs it. At the
      * world's own highest cell the ratio is exactly 1, so that cell lands on the top level
      * without a margin.

@@ -603,10 +603,10 @@ class ClimateFedErosionTest {
         // miss is float noise and not a bias: over seed 7's 7,023 cells under F 0.1 the signed
         // departures average under 3e-5 in every band of the rate, and the worst in a band falls
         // as the rate rises, 1.1e-3 under 2 m, 4.7e-4 under 5, 1.9e-4 under 20 and 5.6e-5 above,
-        // which is a millimetre of a float height field over the cell's cut. Not widened
+        // which is a millimeter of a float height field over the cell's cut. Not widened
         // (docs/TODO.md).
         KnownFailures.expect(
-            "TH1-2c: the cover clause's realised share, at a metre's rate, sits a hair past its tolerance",
+            "TH1-2c: the cover clause's realised share, at a meter's rate, sits a hair past its tolerance",
             "seed 7: where F is under 0.1 the realised share moved by up to 1.08e-03 off e(1+F)/(1+eF)"
         ) {
             if (shareMisses.isNotEmpty()) {

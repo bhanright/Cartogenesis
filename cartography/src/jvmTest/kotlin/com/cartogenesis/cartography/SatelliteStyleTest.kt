@@ -21,6 +21,7 @@ import kotlin.math.atan2
 import kotlin.math.sqrt
 import kotlin.test.Test
 import kotlin.test.assertContentEquals
+import kotlin.test.assertEquals
 import kotlin.test.assertTrue
 
 /**
@@ -212,13 +213,11 @@ class SatelliteStyleTest {
         println("SATELLITE rock summed %.0f, summers %.0f C colder %.0f; %d cells opened, green less red %.1f then %.1f"
             .format(rockBefore, ALPINE_COOLING_C, rockAfter, opened.size, greenBefore, greenAfter))
         assertTrue(rockAfter > rockBefore, "colder summers laid no more rock")
-        // Recorded at TH1-2, whose seed 969495 carries too little ground near the tree line for the
-        // clause: its belts stand lower than TH1-1b's stamped ones (docs/DESIGN_LEDGER.md, TH1-2;
-        // docs/TODO.md, "The ranges above 1,500 m run shorter on the land than Earth's").
-        KnownFailures.expect("TH1-2: the satellite world has too little ground at the tree line to bare", "69 cells") {
-            if (opened.size < FEWEST_DESERT_CELLS) throw RecordedViolation("only ${opened.size} cells where the rock broke through", "${opened.size} cells")
-        }
-        if (opened.size >= FEWEST_DESERT_CELLS) assertTrue(greenAfter < greenBefore - 10, "the opened ground is not less green")
+        // Recorded at TH1-2, whose seed 969495 carried too little ground near the tree line for the
+        // clause: its belts stood lower than TH1-1b's stamped ones; armed again at TH1-2c, whose hot
+        // back-arcs lift the ground there (docs/DESIGN_LEDGER.md, TH1-2 and TH1-2c).
+        assertTrue(opened.size >= FEWEST_DESERT_CELLS, "only ${opened.size} cells where the rock broke through")
+        assertTrue(greenAfter < greenBefore - 10, "the opened ground is not less green")
     }
 
     @Test
@@ -247,10 +246,9 @@ class SatelliteStyleTest {
         // Recorded at W2b, whose drier land leaves cells of seed 969495 that more cover draws less
         // green than the truncations allow: not traced (docs/TODO.md).
         // Armed at TH1-1 on the history's first worlds, which passed it; recorded again on its final
-        // worlds, on which 16 cells draw less green (docs/DESIGN_LEDGER.md, TH1-1).
-        KnownFailures.expect("W2b: a few cells draw less green under more cover", "4") {
-            if (notGreener != 0) throw RecordedViolation("$notGreener cells less green under more cover", "$notGreener")
-        }
+        // worlds, on which 16 cells draw less green (docs/DESIGN_LEDGER.md, TH1-1). Armed at TH1-2c,
+        // on whose world none does (docs/DESIGN_LEDGER.md, TH1-2c).
+        assertEquals(0, notGreener, "$notGreener cells less green under more cover")
     }
 
     @Test

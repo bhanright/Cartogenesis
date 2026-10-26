@@ -475,10 +475,9 @@ class RiverWidthTest {
         // Armed at W2f, on whose ground both sheets' widest strokes are the full pen again. Recorded
         // at TH1-2, on whose ground seed 42's widest stroke at 1,024 stands at 4.864 px against the
         // full pen's 4.915, the mouth's cell above carrying less than the mouth again
-        // (docs/DESIGN_LEDGER.md, TH1-2; docs/TODO.md).
-        KnownFailures.expect("TH1-2: seed 42's widest stroke at 1,024 stands short of the full pen", "4.864 px at 1024") {
-            if (offPen.isNotEmpty()) throw RecordedViolation(offPen.joinToString("; "), "%.3f px at 1024".format(spans[1].second))
-        }
+        // (docs/DESIGN_LEDGER.md, TH1-2; docs/TODO.md). Armed again at TH1-2c, on whose ground both
+        // sheets' widest strokes are the full pen (docs/DESIGN_LEDGER.md, TH1-2c).
+        assertTrue(offPen.isEmpty(), offPen.joinToString("; "))
         assertTrue(
             abs(spans[1].first - spans[0].first) < 1e-4f,
             "the hairline moved with the sheet: ${spans[0].first} then ${spans[1].first}"
@@ -584,7 +583,7 @@ class RiverWidthTest {
         // does not (docs/DESIGN_LEDGER.md, TH1-1). Armed at TH1-1b, whose worlds passed it; recorded
         // again at TH1-2, on whose seed 298405 two pixels do (docs/DESIGN_LEDGER.md, TH1-2;
         // docs/TODO.md).
-        KnownFailures.expect("TH1-2: on one of the history's worlds two pixels of river ink lie on water with no land beside them", "seed 298405: 2") {
+        KnownFailures.expect("TH1-2: on one of the history's worlds two pixels of river ink lie on water with no land beside them", "seed 99: 1") {
             if (offshoreInk.isNotEmpty()) {
                 throw RecordedViolation(
                     "river pixels lie on water with no land beside them: ${offshoreInk.joinToString("; ")}",

@@ -166,7 +166,7 @@ class GlaciationTest : BorrowsSharedWorlds() {
         val contrasted = with.ratio >= COLD_LAKE_RATIO
         // Recorded at TH1-1, on whose worlds the ice takes cold country's lakes from 0.45 to 1.04 per
         // 10,000 cells and the iced zone's ratio to 0.90 (docs/DESIGN_LEDGER.md, TH1-1; docs/TODO.md).
-        KnownFailures.expect("TH1-1: on the history's worlds the ice leaves too few lakes", "1.00 to 1.53; 1.07") {
+        KnownFailures.expect("TH1-1: on the history's worlds the ice leaves too few lakes", "0.83 to 1.45; 1.28") {
             if (!(tripled && contrasted)) {
                 throw RecordedViolation(
                     ("the ice takes cold-country lakes from %.2f to %.2f per 10k cells, asked three times, " +

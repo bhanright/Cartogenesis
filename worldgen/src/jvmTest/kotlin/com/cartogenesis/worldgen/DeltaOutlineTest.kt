@@ -141,19 +141,15 @@ class DeltaOutlineTest {
             "the square-fan control was expected to fail this guard and its worst share was " +
                 "${controlWorst * 100}%, under the ${STRAIGHT_BAR * 100}% bar, so the guard proves nothing"
         )
-        // Recorded at TH1-2, on whose ground the lake fans put 1.26% of their perimeter in such runs
-        // (docs/DESIGN_LEDGER.md, TH1-2; docs/TODO.md).
-        KnownFailures.expect("TH1-2: on the history's new ground the lake fans run straight past the bar", "lake fans 1.26%") {
-            if (!(worstLobe <= STRAIGHT_BAR && worstFan <= STRAIGHT_BAR)) {
-                throw RecordedViolation(
-                    "sea lobes put ${worstLobe * 100}% and lake fans ${worstFan * 100}% of their " +
-                        "perimeter in straight grid-axis runs longer than one lobe reach, over the " +
-                        "${STRAIGHT_BAR * 100}% bar",
-                    (if (worstLobe > STRAIGHT_BAR) "sea lobes %.2f%%; ".format(worstLobe * 100) else "") +
-                        (if (worstFan > STRAIGHT_BAR) "lake fans %.2f%%".format(worstFan * 100) else "")
-                )
-            }
-        }
+        // Recorded at TH1-2, on whose ground the lake fans put 1.26% of their perimeter in such
+        // runs; armed again at TH1-2c, whose ground puts none past the bar (docs/DESIGN_LEDGER.md,
+        // TH1-2c).
+        assertTrue(
+            worstLobe <= STRAIGHT_BAR && worstFan <= STRAIGHT_BAR,
+            "sea lobes put ${worstLobe * 100}% and lake fans ${worstFan * 100}% of their " +
+                "perimeter in straight grid-axis runs longer than one lobe reach, over the " +
+                "${STRAIGHT_BAR * 100}% bar"
+        )
     }
 
     /**

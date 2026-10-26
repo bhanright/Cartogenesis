@@ -386,17 +386,15 @@ class IsostasyTest : BorrowsSharedWorlds() {
         // seeds (TH1-1: 196 to 901), seed 7's rifted margins a fifth of its crust; drawing the crust
         // for the share the history's own crust drowns lands the cut nearer the datum but parts the
         // land (the TODO entry; docs/DESIGN_LEDGER.md, TH1-1 and TH1-1b).
-        KnownFailures.expect("TH1-1: the history's crust stands less of the world above the datum than the slider asks", "seed 7") {
-            if (abs(furthest.second) > SHORELINE_RESIDUAL_BAR_METRES) {
-                throw RecordedViolation(
-                    "seed ${furthest.first}: the sea-level cut lands ${"%.0f".format(furthest.second)} m" +
-                        " from the level isostasy puts the shoreline at, outside the stated" +
-                        " $SHORELINE_RESIDUAL_BAR_METRES m — the crust the plate stage drew is not the" +
-                        " crust the ocean-coverage slider asked for",
-                    "seed ${furthest.first}"
-                )
-            }
-        }
+        // Armed again at TH1-2c, whose crust lands the cut inside the bar (docs/DESIGN_LEDGER.md,
+        // TH1-2c).
+        assertTrue(
+            "seed ${furthest.first}: the sea-level cut lands ${"%.0f".format(furthest.second)} m" +
+                " from the level isostasy puts the shoreline at, outside the stated" +
+                " $SHORELINE_RESIDUAL_BAR_METRES m — the crust the plate stage drew is not the" +
+                " crust the ocean-coverage slider asked for",
+            abs(furthest.second) <= SHORELINE_RESIDUAL_BAR_METRES
+        )
 
         // The control: the aim told to draw far more continental crust than the slider's coverage
         // needs. Nothing else changes — the same seeds, the same plates, the same erosion, on the
@@ -748,7 +746,7 @@ class IsostasyTest : BorrowsSharedWorlds() {
         // denudation this is derived from (docs/DESIGN_LEDGER.md, Fix 3 and Fix 3b). Recorded on
         // H1's ground under the coupled climate, whose rain takes more off the belts: the setting is
         // the generator's to re-derive, not this merge's (docs/DESIGN_LEDGER.md, M1; docs/TODO.md).
-        KnownFailures.expect("M1: the collision rate trails this model's denudation under the coupled climate", "0.855 implied") {
+        KnownFailures.expect("M1: the collision rate trails this model's denudation under the coupled climate", "0.911 implied") {
             if (abs(implied - tectonics.collisionUpliftMmPerYear) > UPLIFT_RATE_TOLERANCE_MM_PER_YEAR) {
                 throw RecordedViolation(
                     "the collision uplift rate is not Earth's surface uplift plus what this model's own rivers take off a " +

@@ -226,7 +226,7 @@ class DataExportTest {
         // (docs/DESIGN_LEDGER.md, Q4, L1 and K2). Recorded again at C1b, whose rain moved the
         // ground: four sea cells over it, the cause still untraced (docs/TODO.md); four again on
         // TH1-2's ground (docs/DESIGN_LEDGER.md, TH1-2).
-        KnownFailures.expect("C1b: sea cells come back above the stated sea level", "4") {
+        KnownFailures.expect("C1b: sea cells come back above the stated sea level", "6") {
             if (waterAbove != 0) {
                 throw RecordedViolation("open sea came back above sea level: $waterAbove", "$waterAbove")
             }

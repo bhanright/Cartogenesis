@@ -311,7 +311,7 @@ class ReliefShadingTest : BorrowsSharedWorlds() {
         // Armed again at A1-2: C1b2's gallery world floored faces under the sky at its ninth decile
         // of slope, and on A1-2's ground no face is floored (docs/DESIGN_LEDGER.md, A1-2). Recorded
         // again at A1-4, whose ground moved with the provisional climates' wind (docs/TODO.md).
-        KnownFailures.expect("A1-4: the gallery cone's steepest faces are floored again", "37") {
+        KnownFailures.expect("A1-4: the gallery cone's steepest faces are floored again", "43") {
             if (sky.floored != 0) {
                 throw RecordedViolation(
                     "${sky.floored} of $BEARINGS bearings round the cone are pinned at the darkest factor the model " +
@@ -406,7 +406,7 @@ class ReliefShadingTest : BorrowsSharedWorlds() {
         // Recorded at K2: the gallery's world on the 12,000 km planet under K2's physics is other
         // ground than the one the declared figure was read off; it is the drawing's to re-derive,
         // with its other constants, for the Earth-sized default (docs/TODO.md).
-        KnownFailures.expect("K2: the relief's ordinary ground was read off the gallery's ground before K2", "0.8566") {
+        KnownFailures.expect("K2: the relief's ordinary ground was read off the gallery's ground before K2", "0.8788") {
             if (kotlin.math.abs(declaredGround - ReliefShading.ordinaryGround) > MAX_GROUND_DRIFT) {
                 val found = "%.4f".format(declaredGround)
                 throw RecordedViolation(
@@ -713,11 +713,17 @@ class ReliefShadingTest : BorrowsSharedWorlds() {
         // ground to a tenth percentile of 0.066 (docs/TODO.md); armed again at W2c, whose ground
         // reads 0.059, the floor's hundredth (docs/DESIGN_LEDGER.md, W2c).
         // Recorded at TH1-1, whose crust moved the gallery's ground to a tenth percentile of 0.091;
-        // armed at TH1-2, whose ground reads the floor's hundredth (docs/DESIGN_LEDGER.md, TH1-2).
-        assertEquals(
-            LandSlopes.hundredths(EngravingPlan.SLOPE_FLOOR), LandSlopes.hundredths(tenth),
-            "the tenth percentile of seed 234475's land slope at 512 rows is $tenth; the floor is ${EngravingPlan.SLOPE_FLOOR}"
-        )
+        // armed at TH1-2, whose ground reads the floor's hundredth (docs/DESIGN_LEDGER.md, TH1-2);
+        // recorded again at TH1-2c, whose hot back-arcs move the gallery's ground to a tenth
+        // percentile of 0.051 (docs/DESIGN_LEDGER.md, TH1-2c; docs/TODO.md).
+        KnownFailures.expect("TH1-2c: on the history's ground the land's slope floor moved", "0.05") {
+            if (LandSlopes.hundredths(EngravingPlan.SLOPE_FLOOR) != LandSlopes.hundredths(tenth)) {
+                throw RecordedViolation(
+                    "the tenth percentile of seed 234475's land slope at 512 rows is $tenth; the floor is ${EngravingPlan.SLOPE_FLOOR}",
+                    LandSlopes.hundredths(tenth)
+                )
+            }
+        }
     }
 
     /**

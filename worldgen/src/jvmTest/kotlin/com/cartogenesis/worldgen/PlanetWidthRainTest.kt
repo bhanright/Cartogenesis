@@ -56,7 +56,7 @@ class PlanetWidthRainTest {
         // moves 1.7 times where it moved 2.6 (docs/DESIGN_LEDGER.md, W2e; docs/TODO.md).
         KnownFailures.expect(
             "W2e: the windward percentile on the wide planet stands past the stock seeds' spread",
-            "the land's 99.5th percentile is 1.74 times the stock planet's on a 24000 km planet"
+            "the land's 99.5th percentile is 1.95 times the stock planet's on a 24000 km planet"
         ) {
             if (wrong.isNotEmpty()) {
                 throw RecordedViolation("land rain follows the planet's width:\n" + wrong.joinToString("\n"), wrong.joinToString("; "))

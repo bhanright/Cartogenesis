@@ -77,7 +77,7 @@ class OceanCurrentTest : BorrowsSharedWorlds() {
         // three seeds the band's mean with it (docs/TODO.md).
         val trades = failures.filter { "the trades' band flows east" in it }
         assertTrue((failures - trades.toSet()).isEmpty(), (failures - trades.toSet()).joinToString("\n"))
-        KnownFailures.expect("A1-6b: under the circulation alone the trades' band flows east", "seed 42 at 256 rows: under the belts alone the trades' band flows east in the south (+0.0017 m/s); seed 1234 at 256 rows: under the belts alone the trades' band flows east in the south (+0.0003 m/s); seed 99 at 256 rows: under the belts alone the trades' band flows east in the north (+0.0007 m/s)") {
+        KnownFailures.expect("A1-6b: under the circulation alone the trades' band flows east", "seed 7 at 256 rows: under the belts alone the trades' band flows east in the south (+0.0028 m/s); seed 42 at 256 rows: under the belts alone the trades' band flows east in the south (+0.0003 m/s); seed 1234 at 256 rows: under the belts alone the trades' band flows east in the south (+0.0009 m/s); seed 99 at 256 rows: under the belts alone the trades' band flows east in the north (+0.0010 m/s)") {
             if (trades.isNotEmpty()) throw RecordedViolation(trades.joinToString("\n"), trades.joinToString("; "))
         }
     }
@@ -111,15 +111,13 @@ class OceanCurrentTest : BorrowsSharedWorlds() {
         // Recorded at K2, when settlement waited for the atlas overhaul on the Earth-sized planet,
         // and armed again at C1b, whose climate passes it, and on H1's ground under the coupled
         // climate (docs/DESIGN_LEDGER.md, K2, C1b and M1). Recorded at TH1-2, on whose seed 42
-        // the cold coasts settle 1.5% better than the warm (docs/DESIGN_LEDGER.md, TH1-2;
-        // docs/TODO.md).
+        // the cold coasts settled 1.5% better than the warm; armed again at TH1-2c, whose worlds
+        // pass it (docs/DESIGN_LEDGER.md, TH1-2c).
         val complaints = listOfNotNull(
             under.takeIf { it.isNotEmpty() }?.let { "cold coasts settled no worse than warm ones: $it" },
             "pooled %.1f%%".format((pooled - 1) * 100).takeIf { pooled <= 1.02 }
         )
-        KnownFailures.expect("TH1-2: on one of the history's worlds the cold coasts settle no worse than the warm", "cold coasts settled no worse than warm ones: seed 42 at -1.5%") {
-            if (complaints.isNotEmpty()) throw RecordedViolation(complaints.joinToString("; "), complaints.joinToString("; "))
-        }
+        assertTrue(complaints.isEmpty(), complaints.joinToString("; "))
     }
 
     /**

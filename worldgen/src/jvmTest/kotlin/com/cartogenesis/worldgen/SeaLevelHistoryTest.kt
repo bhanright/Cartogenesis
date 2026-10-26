@@ -165,10 +165,9 @@ class SeaLevelHistoryTest : BorrowsSharedWorlds() {
         // the sphere moved the ground back over it (docs/DESIGN_LEDGER.md, A1-2). Armed as well at
         // H1, on whose ground every seed's lowstand drowns a valley (docs/DESIGN_LEDGER.md, H1).
         // Recorded at TH1-1b, on whose seed 1234 the lowstand leaves 224 mouths inside an inlet
-        // against 232 at today's level (docs/DESIGN_LEDGER.md, TH1-1b; docs/TODO.md).
-        KnownFailures.expect("TH1-1b: on seed 1234 the lowstand drowns no valleys", "seed 7 93 against 126") {
-            if (shortfalls.isNotEmpty()) throw RecordedViolation(shortfalls.joinToString("; "), figures.joinToString("; "))
-        }
+        // against 232 at today's level (docs/DESIGN_LEDGER.md, TH1-1b; docs/TODO.md). Armed again at
+        // TH1-2c, whose worlds pass it (docs/DESIGN_LEDGER.md, TH1-2c).
+        assertTrue(shortfalls.isEmpty(), shortfalls.joinToString("; "))
         // Recorded with the clause above (docs/DESIGN_LEDGER.md, K2; docs/TODO.md).
         // Armed at A1-4, whose ground and rain read it again (docs/DESIGN_LEDGER.md, A1-4); recorded
         // at A1-5, whose rain moved the ground under it once more (docs/TODO.md). Armed again at H1

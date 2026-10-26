@@ -245,11 +245,9 @@ class RealmSpreadTest : BorrowsSharedWorlds() {
             stranded += pieces.stranded.size
             landlocked += pieces.enclosedRealms.count { !it.touchesTheSea }
         }
-        // Recorded at TH1-2, on whose worlds one piece is stranded at 256 rows
-        // (docs/DESIGN_LEDGER.md, TH1-2; docs/TODO.md).
-        KnownFailures.expect("TH1-2: one realm's piece is stranded in another on the history's worlds", "1 stranded") {
-            if (stranded != 0) throw RecordedViolation("pieces stranded in other realms over the four standard seeds: $stranded", "$stranded stranded")
-        }
+        // Recorded at TH1-2, on whose worlds one piece was stranded at 256 rows; armed again at
+        // TH1-2c, whose worlds strand none (docs/DESIGN_LEDGER.md, TH1-2c).
+        assertEquals(0, stranded, "pieces stranded in other realms over the four standard seeds")
         // Recorded at L1's review round, once the rift valleys were Earth's width, at four realms
         // landlocked inside one neighbour against three; armed again at K1, whose square weather
         // and scour moved the realms back under it (docs/DESIGN_LEDGER.md, L1 and K1).

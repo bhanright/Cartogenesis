@@ -76,7 +76,8 @@ class OceanLeavesTheGroundTest : BorrowsSharedWorlds() {
      * share is the planet's area. TH1-2 re-took the same three: the upper plates deform at their
      * trenches, the belts are the history's crust with ridges along strike and the rock's
      * erodibility, the young belts' window is replayed by the erosion, and a rift needs continent on
-     * both sides. An ocean change that leaks into the ground moves them.
+     * both sides. TH1-2c re-took the same three: a hot back-arc stands behind every live trench and
+     * cools at its own time constant, and each world's lattice is turned by its seed. An ocean change that leaks into the ground moves them.
      * A chunk meant to move the ground re-takes them here, as the render records are re-taken.
      * At [SharedWorlds.DETAIL_ROWS], whose standard worlds the detail guards generate anyway, so
      * the pin costs a digest and no generation.
@@ -96,33 +97,33 @@ class OceanLeavesTheGroundTest : BorrowsSharedWorlds() {
         val GROUND_AT_512_ROWS: Map<String, Long> = mapOf(
             "terrain.normals" to 6074751788244030761L,
             "terrain.height" to 7240865613227243168L,
-            "plates.plates" to -8381141360960408497L,
-            "plates.plateId" to -8943616683571395042L,
-            "plates.boundaryDistance" to 1566471359269578774L,
-            "plates.nearestBoundaryType" to -7517320297566778385L,
-            "plates.nearestBoundaryClass" to -8832068715010875439L,
-            "plates.height" to 2308355280412541100L,
-            "plates.seafloorAgeMyr" to 8548714636810431496L,
-            "plates.seafloorHalfSpreadingRateKmPerMyr" to -7571923484054356132L,
-            "plates.continentalShare" to 882235897240160266L,
-            "plates.upliftRateMmPerYear" to 998576898901848205L,
-            "plates.crustAgeMyr" to 4682049423185044043L,
-            "plates.crustThicknessKm" to 4426547552965769500L,
-            "plates.orogenicExcessKm" to -647103355489070660L,
-            "plates.orogenyKind" to 1153169266298775457L,
-            "plates.terraneId" to -817478928985698698L,
-            "plates.riftAgeMyr" to -6253298847625631957L,
-            "plates.rockErodibility" to -1193831998664729271L,
-            "plates.windowTectonicKm" to -4853909329586563523L,
-            "plates.windowWearKm" to 7058058754497967665L,
-            "plates.windowOnsetMyrAgo" to -8615035557741797985L,
+            "plates.plates" to 3917137307598863656L,
+            "plates.plateId" to 401508425367660866L,
+            "plates.boundaryDistance" to 6689825411907013802L,
+            "plates.nearestBoundaryType" to 2365921136121937757L,
+            "plates.nearestBoundaryClass" to 4469012307783500296L,
+            "plates.height" to 5618236171103727664L,
+            "plates.seafloorAgeMyr" to 38077735158606035L,
+            "plates.seafloorHalfSpreadingRateKmPerMyr" to 3664504083695585842L,
+            "plates.continentalShare" to -6927718574923087874L,
+            "plates.upliftRateMmPerYear" to -6945949472492381772L,
+            "plates.crustAgeMyr" to -8657102125320745076L,
+            "plates.crustThicknessKm" to -5494104400115855287L,
+            "plates.orogenicExcessKm" to -8829537918862340492L,
+            "plates.orogenyKind" to -4637805461740389800L,
+            "plates.terraneId" to 3102677728008120338L,
+            "plates.riftAgeMyr" to -122927204389976897L,
+            "plates.rockErodibility" to 3182590276419559818L,
+            "plates.windowTectonicKm" to -1017985078175827327L,
+            "plates.windowWearKm" to 1851443143122907588L,
+            "plates.windowOnsetMyrAgo" to 4035947595858816465L,
             "plates.exposureWindowMyr" to 5003754825279433589L,
-            "erosion.height" to -5461603183151310L,
+            "erosion.height" to -534356067670680851L,
             "erosion.sweptOnDevice" to -358906410940142731L,
-            "sea.shorelineHeight" to 6136450936180850468L,
-            "sea.isLand" to -4916048300647022548L,
-            "sea.relativeElevation" to 1917644576266979265L,
-            "sea.landCellCount" to -3578219799992521041L
+            "sea.shorelineHeight" to -1173977029005291191L,
+            "sea.isLand" to -1712408077943130106L,
+            "sea.relativeElevation" to -5168511183198189431L,
+            "sea.landCellCount" to -623822849077492323L
         )
     }
 }

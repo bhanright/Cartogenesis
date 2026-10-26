@@ -177,16 +177,13 @@ class BoundaryLayerTest : BorrowsSharedWorlds() {
         assertTrue(worstMass < MASS_TOLERANCE, "the layer's convergence leaves $worstMass of itself over the sphere")
         // Recorded at TH1-1, whose worlds' continents lie inside plates and whose sea covers 71% of
         // the planet: on one of them the layer's convergence followed the drag balance less closely
-        // than the bar. Armed at TH1-1b, whose worlds passed it; recorded again at TH1-2, on whose
-        // seed 1234 the July layer reads r = 0.305 (docs/DESIGN_LEDGER.md, TH1-2; docs/TODO.md).
-        KnownFailures.expect("TH1-2: on one of the history's worlds the layer follows the drag balance less closely than the bar", "r = 0.305") {
-            if (lowestCorrelation <= BALANCE_CORRELATION) {
-                throw RecordedViolation(
-                    "the layer's vertical motion follows the pressure's drag balance at r = $lowestCorrelation",
-                    "r = %.3f".format(lowestCorrelation)
-                )
-            }
-        }
+        // than the bar. Armed at TH1-1b, whose worlds passed it; recorded at TH1-2, on whose seed
+        // 1234 the July layer read r = 0.305, and armed again at TH1-2c, whose worlds pass it
+        // (docs/DESIGN_LEDGER.md, TH1-2c).
+        assertTrue(
+            lowestCorrelation > BALANCE_CORRELATION,
+            "the layer's vertical motion follows the pressure's drag balance at r = $lowestCorrelation"
+        )
     }
 
     /**

@@ -372,7 +372,7 @@ class PenAndInkTest : BorrowsSharedWorlds() {
         // climate (docs/DESIGN_LEDGER.md, C1b, H1 and M1).
         // Recorded at TH1-1, whose crust moved the gallery's ground: 32.0 degrees
         // (docs/DESIGN_LEDGER.md, TH1-1; docs/TODO.md).
-        KnownFailures.expect("TH1-1: on the history's ground the ink runs further from the aspect", "32.7") {
+        KnownFailures.expect("TH1-1: on the history's ground the ink runs further from the aspect", "31.5") {
             if (engravedError.meanDegrees > MAX_MEAN_ASPECT_ERROR_DEGREES) {
                 throw RecordedViolation(
                     "the ink runs %.1f degrees from the aspect on average, past %.1f"
@@ -683,7 +683,7 @@ class PenAndInkTest : BorrowsSharedWorlds() {
         val widest = LandSlopes.hundredths(EngravingPlan.SLOPE_FLOOR + 1f / MapStyle.PEN_AND_INK.inkGain)
         println("PENINK the seventy-fifth percentile of the land slope rounds to $seventyFifth; the widest stroke is at $widest")
         // Re-recorded at L1, whose rifts moved the gallery world's slopes (docs/DESIGN_LEDGER.md, L1).
-        KnownFailures.expect(INK_GAIN_STALE, "the seventy-fifth percentile rounds to 1.01, the widest stroke is at 0.39") {
+        KnownFailures.expect(INK_GAIN_STALE, "the seventy-fifth percentile rounds to 0.78, the widest stroke is at 0.39") {
             if (seventyFifth != widest) {
                 throw RecordedViolation(
                     "the seventy-fifth percentile of seed 234475's land slope is ${LandSlopes.percentile(slopes, 0.75)}; " +

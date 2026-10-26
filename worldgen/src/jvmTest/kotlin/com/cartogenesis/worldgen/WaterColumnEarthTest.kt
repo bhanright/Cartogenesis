@@ -276,7 +276,7 @@ class WaterColumnEarthTest : BorrowsSharedWorlds() {
         // Earth's, the polar band's gone (docs/DESIGN_LEDGER.md, W2e; docs/TODO.md). At W2h three and a
         // half times, x3.49, the tropics' deserts growing most under the converged stationary waves
         // and the cells' edges by sector (docs/DESIGN_LEDGER.md, W2h; docs/TODO.md).
-        KnownFailures.expect("W2e: the tropics' land is twice Earth's desert", "band 1 x0.44") {
+        KnownFailures.expect("W2e: the tropics' land is twice Earth's desert", "band 1 x0.39") {
             if (misplaced.isNotEmpty()) throw RecordedViolation("desert misplaced by band: $misplaced", misplaced.joinToString())
         }
     }

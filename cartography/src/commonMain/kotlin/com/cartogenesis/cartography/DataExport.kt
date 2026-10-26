@@ -129,9 +129,17 @@ object DataExports {
     /**
      * Bumped when a field in the sidecar changes meaning, so a reader's parser can tell.
      *
+     * 4 gave the sea's half of the file its own range, as version 2 already said it had. Versions
+     * 2 and 3 stated `metresPerGreyLevelBelowSeaLevel` as the deepest ocean over 32,767 levels but
+     * wrote every depth at the land's scale, so the deepest floor sat near gray 14,500 rather than
+     * near 1 and a reader following the sidecar put every sea floor about 1.8 times too shallow.
+     * Each cell is now written from its altitude in meters, on the half of the ruler its own side
+     * of the shoreline is on, and the new `heightmapFloorMetres` states where level 1 lands: the
+     * deepest ocean, or the world's own deepest floor where a trench goes past it.
+     *
      * 3 raised the heightmap's ceiling so the ice fits under it. The elevation field carries the
      * ice sheet's surface since I1, which stands over the top of the land's own ruler, so
-     * `metresPerGreyLevel` is now that ruler times [heightmapCeilingRulers] and a new
+     * `metresPerGreyLevel` is now that ruler times the ceiling in rulers and a new
      * `heightmapCeilingMetres` states where white lands. A version-2 reader would put every cell
      * 80% too low.
      *
@@ -139,17 +147,8 @@ object DataExports {
      * `metresPerGreyLevelBelowSeaLevel` rather than the land's `metresPerGreyLevel`, and
      * `maxAltitudeMetres` became `highestLandMetres` beside a new `deepestOceanMetres`.
      */
-    const val SIDECAR_VERSION = 3
+    const val SIDECAR_VERSION = 4
 
-    /**
-     * Where the shoreline-relative elevation of a cell lands in the sixteen-bit range.
-     *
-     * [relativeElevation] is [com.cartogenesis.worldgen.pipeline.SeaLevelResult.relativeElevation]:
-     * 0..1 from the shoreline to the highest ground, -1..0 from the shoreline to the deepest sea
-     * floor. That is the field every stage downstream of sea level reads and the field the map is
-     * drawn from, so it is the field the heightmap carries — not the raw uplift, which the shelf,
-     * the ice and the drowned-basin outlets have all since moved.
-     */
     /** The most a sixteen-bit sample can hold. */
     const val HIGHEST_GREY_LEVEL = 65535
 
@@ -175,8 +174,8 @@ object DataExports {
      *
      * That is the *intended* envelope, not a guarantee: the cap is held by `IceSheetTest`, which
      * records worlds whose ice stands past it, and a sheet on high ground reads over it here. So
-     * the ceiling an export uses is [heightmapCeilingRulers], which never sits under the highest
-     * surface the world actually has.
+     * the ceiling an export uses is [heightmapScale]'s, which never sits under the highest surface
+     * the world actually has.
      *
      * The cost is precision, and it is small: a grey level goes from 0.183 m to 0.329 m, still a
      * third of a metre over a range of ten kilometres, and the eight-bit control this is measured
@@ -193,62 +192,109 @@ object DataExports {
         1f + IceSheet.THICKEST_ICE_ON_EARTH_METRES / config.scale.highestLandMetres
 
     /**
-     * The heightmap's top for [world], in the elevation field's own units: the intended envelope
-     * ([intendedHeightmapCeilingRulers]), or the world's own highest surface where that stands
-     * above it.
+     * What one world's heightmap spans, and the arithmetic between a gray level and meters.
      *
-     * Read off the world because a bound has to hold for every world the generator can make, and
-     * the ice cap it is derived from is not enforced by the generator, only recorded when broken.
-     * A cell above the ceiling is clipped to white and cannot round-trip. Taking the larger of the
-     * two keeps the gray level the same across every world that stays inside the envelope, so
-     * their files remain comparable, and spends precision only on a world that needs it. At the
-     * world's own highest cell the ratio is exactly 1, so that cell lands on the top level
-     * without a margin.
+     * Two halves with a range each, because the vertical range is two numbers rather than one: the
+     * land's 32,767 levels run from the shoreline up to [ceilingMetres] and the sea's 32,767 run
+     * from it down to [floorMetres]. Each half is spent in full on its own range, so the deepest
+     * floor lands on level 1 just as the highest surface lands on the top level, and the sidecar
+     * states one meters-per-level figure for each.
      */
-    fun heightmapCeilingRulers(world: WorldMap): Float {
-        var highestSurface = Float.NEGATIVE_INFINITY
-        for (value in world.sea.relativeElevation.data) {
-            if (value > highestSurface) highestSurface = value
+    class HeightmapScale(
+        /** Meters above the waterline that white, the top level, stands for. */
+        val ceilingMetres: Double,
+        /** Meters below the waterline that level 1, the darkest one written, stands for. */
+        val floorMetres: Double
+    ) {
+        /**
+         * Meters of altitude one gray level above the sea-level gray is worth.
+         *
+         * [com.cartogenesis.worldgen.model.WorldScale.highestLandMetres] is the top of the land's
+         * half of the generator's ruler, which is what the lapse rate in `ClimateStage` is computed
+         * against; [ceilingMetres] is taller, to fit the ice standing on the ground — see
+         * [intendedHeightmapCeilingRulers].
+         */
+        val metresPerGreyLevel: Double get() = ceilingMetres / LEVELS_PER_SIDE
+
+        /**
+         * Meters of depth one gray level below the sea-level gray is worth.
+         *
+         * On the stock ruler a little finer than the land's, 0.305 m against 0.329: the deepest
+         * floor is further from the waterline than the highest ground, but not than the ground
+         * with Earth's thickest ice on it.
+         */
+        val metresPerGreyLevelBelowSeaLevel: Double get() = floorMetres / LEVELS_PER_SIDE
+
+        /**
+         * Where a cell [altitudeMetres] above the waterline (below it if negative) lands in the
+         * sixteen-bit range: on the land's scale above the waterline and the sea's below it, which
+         * is the only reading a program holding nothing but the file and its sidecar can make.
+         */
+        fun greyLevelFor(altitudeMetres: Double): Int {
+            val levels =
+                if (altitudeMetres >= 0.0) altitudeMetres / metresPerGreyLevel
+                else altitudeMetres / metresPerGreyLevelBelowSeaLevel
+            val side = LEVELS_PER_SIDE.toDouble()
+            return SEA_LEVEL_GREY_LEVEL + levels.coerceIn(-side, side).roundToInt()
         }
-        return maxOf(intendedHeightmapCeilingRulers(world.config), highestSurface)
+
+        /** The inverse, which is the sidecar's `metresFromGreyLevel` and what a reader computes. */
+        fun altitudeMetresFor(greyLevel: Int): Double {
+            val metresPerLevel =
+                if (greyLevel >= SEA_LEVEL_GREY_LEVEL) metresPerGreyLevel
+                else metresPerGreyLevelBelowSeaLevel
+            return (greyLevel - SEA_LEVEL_GREY_LEVEL) * metresPerLevel
+        }
     }
 
-    fun greyLevelFor(relativeElevation: Float, ceilingRulers: Float): Int =
-        (
-            SEA_LEVEL_GREY_LEVEL +
-                (relativeElevation / ceilingRulers).coerceIn(-1f, 1f) * LEVELS_PER_SIDE
-            )
-            .roundToInt()
-            .coerceIn(0, HIGHEST_GREY_LEVEL)
-
-    /** The inverse, which is the arithmetic a reader of the file has to do. */
-    fun relativeElevationFor(greyLevel: Int, ceilingRulers: Float): Float =
-        (greyLevel - SEA_LEVEL_GREY_LEVEL).toFloat() / LEVELS_PER_SIDE * ceilingRulers
+    /**
+     * The altitude in meters of [cell] of [world], on the half of the ruler its own side of the
+     * shoreline is on.
+     *
+     * Read from [com.cartogenesis.worldgen.pipeline.SeaLevelResult.relativeElevation], the field
+     * every stage downstream of sea level reads and the map is drawn from — not the raw uplift,
+     * which the shelf, the ice and the drowned-basin outlets have all since moved. Which half a
+     * cell is on is `isLand`'s answer and not the sign's: a land cell below the waterline, a
+     * drained basin's floor or a fjord's, keeps the land's scale, as `WorldScale` says, and only
+     * once it is meters can it be written on the sea's half of the file.
+     */
+    fun altitudeMetres(world: WorldMap, cell: Int): Float {
+        val relative = world.sea.relativeElevation.data[cell]
+        return if (world.sea.isLand[cell]) world.config.scale.metresAboveShoreline(relative)
+        else world.config.scale.metresBelowShoreline(relative)
+    }
 
     /**
-     * Metres of altitude one grey level above the sea-level grey is worth.
+     * The heightmap's two ends for [world]: the intended envelope at each end, or the world's own
+     * highest surface and deepest floor where those stand past it.
      *
-     * [com.cartogenesis.worldgen.model.WorldScale.highestLandMetres] is the top of the land's half
-     * of the generator's ruler: the full 0..1 above the shoreline is that many metres, which is
-     * what the lapse rate in `ClimateStage` is computed against.
-     *
-     * Below the waterline the scale is a different one — see [metresPerGreyLevelBelowSeaLevel] —
-     * because the sea now has a depth of its own rather than borrowing the land's. The sidecar
-     * states both, and both ends of the range, so a reader can convert either half.
+     * The ceiling's envelope is [intendedHeightmapCeilingRulers]; the floor's is
+     * [com.cartogenesis.worldgen.model.WorldScale.deepestOceanMetres], which is the sea's half of
+     * the generator's ruler and not a limit on it — a trench can go past it, as Earth's does past
+     * any round figure, and seed 42 at 512 rows has a floor at 11,143 m against the ruler's 10,000.
+     * Read off the world because a bound has to hold for every world the generator can make: a
+     * cell past either end is clipped and cannot round-trip. Taking the larger keeps the gray
+     * level the same across every world that stays inside the envelope, so their files remain
+     * comparable, and spends precision only on a world that needs it. At the world's own highest
+     * or deepest cell the ratio is exactly 1, so that cell lands on the end level without a margin.
      */
-    fun metresPerGreyLevel(world: WorldMap): Double =
-        world.config.scale.highestLandMetres.toDouble() *
-            heightmapCeilingRulers(world) / LEVELS_PER_SIDE
-
-    /**
-     * Metres of depth one grey level below the sea-level grey is worth.
-     *
-     * The sea's half of the ruler, [com.cartogenesis.worldgen.model.WorldScale.deepestOceanMetres]
-     * over the same number of grey levels. Steeper than the land's, because the deepest floor is
-     * further from the waterline than the highest ground is.
-     */
-    fun metresPerGreyLevelBelowSeaLevel(config: WorldGenConfig): Double =
-        config.scale.deepestOceanMetres.toDouble() / LEVELS_PER_SIDE
+    fun heightmapScale(world: WorldMap): HeightmapScale {
+        var highest = 0.0
+        var deepest = 0.0
+        for (cell in world.sea.isLand.indices) {
+            val metres = altitudeMetres(world, cell).toDouble()
+            if (metres > highest) highest = metres
+            if (metres < deepest) deepest = metres
+        }
+        val scale = world.config.scale
+        return HeightmapScale(
+            ceilingMetres = maxOf(
+                scale.highestLandMetres.toDouble() * intendedHeightmapCeilingRulers(world.config),
+                highest
+            ),
+            floorMetres = maxOf(scale.deepestOceanMetres.toDouble(), -deepest)
+        )
+    }
 
     /**
      * What the file is called, before the extension: the seed, the size and the layer, where
@@ -305,9 +351,10 @@ object DataExports {
     }
 
     private suspend fun heightmapPng(world: WorldMap, deflater: ZlibDeflater): ByteArray {
-        val relative = world.sea.relativeElevation.data
-        val ceilingRulers = heightmapCeilingRulers(world)
-        val samples = IntArray(relative.size) { greyLevelFor(relative[it], ceilingRulers) }
+        val scale = heightmapScale(world)
+        val samples = IntArray(world.sea.isLand.size) {
+            scale.greyLevelFor(altitudeMetres(world, it).toDouble())
+        }
         return PngWriter.greyscale16(world.width, world.height, samples, deflater)
     }
 
@@ -396,8 +443,9 @@ object DataExports {
 
     private fun heightmapSidecar(world: WorldMap, appVersion: String, source: ExportedWorld): String {
         val config = world.config
-        val metresPerLevel = metresPerGreyLevel(world)
-        val metresPerLevelBelow = metresPerGreyLevelBelowSeaLevel(config)
+        val range = heightmapScale(world)
+        val metresPerLevel = range.metresPerGreyLevel
+        val metresPerLevelBelow = range.metresPerGreyLevelBelowSeaLevel
         val json = JsonLines()
         common(json, world, DataLayer.HEIGHTMAP, appVersion, source)
         json.number("bitsPerSample", GREYSCALE_BITS_PER_SAMPLE)
@@ -410,10 +458,8 @@ object DataExports {
             metresPerLevel * (HIGHEST_GREY_LEVEL - SEA_LEVEL_GREY_LEVEL)
         )
         json.number("metresAtGreyLevel0", metresPerLevelBelow * (0 - SEA_LEVEL_GREY_LEVEL))
-        json.number(
-            "heightmapCeilingMetres",
-            config.scale.highestLandMetres.toDouble() * heightmapCeilingRulers(world)
-        )
+        json.number("heightmapCeilingMetres", range.ceilingMetres)
+        json.number("heightmapFloorMetres", range.floorMetres)
         json.text(
             "heightmapCarries",
             "the ice sheet's surface where there is one, not the bed beneath it"

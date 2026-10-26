@@ -59,54 +59,86 @@ class DataExportTest {
         DataExports.write(world, layer, GzipCompressor, BuildInfo.VERSION)
     }
 
+    /**
+     * The altitude of [cell] in meters, on the half of the ruler its own side of the shoreline is
+     * on: a land cell below the waterline keeps the land's scale, as `WorldScale` says it does.
+     */
+    private fun altitudeMetres(cell: Int): Double {
+        val relative = world.sea.relativeElevation.data[cell]
+        return if (world.sea.isLand[cell]) config.scale.metresAboveShoreline(relative).toDouble()
+        else config.scale.metresBelowShoreline(relative).toDouble()
+    }
+
     // ---- the heightmap ------------------------------------------------------------------------
 
     /**
-     * The guard the chunk turns on: sixteen bits of elevation survive the round trip.
+     * The guard the chunk turns on: sixteen bits of elevation survive the round trip, read the way
+     * a stranger's program reads them.
      *
-     * The failure this exists to catch is not a subtle one, it is the obvious one — routing the
-     * heightmap through the encoder the picture export already uses, which is eight bits a channel
-     * and would look perfectly fine on screen. So the eight-bit quantisation of the same field is
-     * measured beside it: the bar has to pass what was built and fail what would have been easier
-     * to build, or it is not a bar.
+     * The failure this exists to catch first is not a subtle one, it is the obvious one — routing
+     * the heightmap through the encoder the picture export already uses, which is eight bits a
+     * channel and would look perfectly fine on screen. So the eight-bit quantization of the same
+     * altitudes is measured beside it: the bar has to pass what was built and fail what would have
+     * been easier to build, or it is not a bar.
+     *
+     * The second is the one that got through. The file is decoded with nothing but the numbers its
+     * sidecar prints and the formula its sidecar states, against each cell's altitude in meters
+     * read off `WorldScale` by the side of the shoreline the cell is on — never through the
+     * encoder's own inverse. Until the sea's half was given its own range, the encoder wrote depths
+     * at the land's scale and decoded them the same way, so a round trip through its inverse passed
+     * while a reader following the sidecar put every sea floor 1.8 times too shallow.
      */
     @Test
-    fun `a heightmap read back is the elevation field to sixteen-bit precision`() {
+    fun `a heightmap read through its sidecar's formula is every cell's altitude to one gray level`() {
         val files = write(DataLayer.HEIGHTMAP)
         val image = decode(files.image)
+        val json = parse(files.sidecar)
 
         assertEquals(
             BufferedImage.TYPE_USHORT_GRAY,
             image.type,
-            "the heightmap did not come back as a 16-bit greyscale image"
+            "the heightmap did not come back as a 16-bit grayscale image"
         )
         assertEquals(world.width, image.width)
         assertEquals(world.height, image.height)
 
+        val scale = config.scale
         val relative = world.sea.relativeElevation.data
-        // One grey level, in the units the field is held in. Anything at or under this is
-        // quantisation and nothing else; anything over it is a value that was not carried.
-        //
-        // A grey level is worth more of the field than it was, because the heightmap's ceiling now
-        // covers the ice standing on the ground as well as the ground: see
-        // [DataExports.heightmapCeilingRulers]. The bar follows the encoding rather than being
-        // restated, so it is still exactly one level and still forty times tighter than eight bits.
-        val ceilingRulers = DataExports.heightmapCeilingRulers(world)
-        val oneGreyLevel = ceilingRulers.toDouble() / DataExports.LEVELS_PER_SIDE
+        val seaLevel = json.int("seaLevelGreyLevel")
+        val metresPerLevel = json.number("metresPerGreyLevel")
+        val metresPerLevelBelow = json.number("metresPerGreyLevelBelowSeaLevel")
+        // The meters one gray level is worth on the side of the waterline [metres] is on. Anything
+        // at or under one level is quantization and nothing else; anything over it is a value that
+        // was not carried, or a sidecar that misstates the scale.
+        fun oneLevelAt(metres: Double) = if (metres >= 0.0) metresPerLevel else metresPerLevelBelow
 
-        var worst = 0.0
+        val encoding = DataExports.heightmapScale(world)
+        var inverseDisagrees = 0
+        var worstLevels = 0.0
         var worstAt = 0
+        var deepestMetres = 0.0
+        var deepestLevel = seaLevel
         val shorelineLevels = mutableSetOf<Int>()
         for (y in 0 until image.height) {
             for (x in 0 until image.width) {
                 val i = y * image.width + x
                 val level = image.raster.getSample(x, y, 0)
-                val error =
-                    abs(DataExports.relativeElevationFor(level, ceilingRulers) - relative[i])
-                        .toDouble()
-                if (error > worst) {
-                    worst = error
+                val metres = altitudeMetres(i)
+                // The sidecar's `metresFromGreyLevel`, as a reader types it.
+                val read = (level - seaLevel) *
+                    (if (level >= seaLevel) metresPerLevel else metresPerLevelBelow)
+                // The encoder's own inverse has to be that same arithmetic, to the sidecar's six
+                // printed decimals, or it is a second reading a stranger never makes.
+                val inverse = encoding.altitudeMetresFor(level)
+                if (abs(inverse - read) > abs(level - seaLevel) * 0.5e-6) inverseDisagrees++
+                val errorLevels = abs(read - metres) / oneLevelAt(metres)
+                if (errorLevels > worstLevels) {
+                    worstLevels = errorLevels
                     worstAt = i
+                }
+                if (metres < deepestMetres) {
+                    deepestMetres = metres
+                    deepestLevel = level
                 }
                 // Every cell exactly at the waterline must sit on the stated level, or the number
                 // in the sidecar is a number a reader cannot act on.
@@ -114,28 +146,43 @@ class DataExportTest {
             }
         }
 
-        // The same field with only eight bits to spend, which is what any picture encoder would
-        // have given: 256 levels over the same range instead of 65,535.
-        var worstAtEightBits = 0.0
-        for (value in relative) {
-            val level = (128 + value.coerceIn(-1f, 1f) * 127).roundToInt().coerceIn(0, 255)
-            val back = (level - 128) / 127f
-            worstAtEightBits = maxOf(worstAtEightBits, abs(back - value).toDouble())
+        // The same altitudes with only eight bits to spend, which is what any picture encoder
+        // would have given: 127 levels a side over the same two ranges instead of 32,767.
+        var worstLevelsAtEightBits = 0.0
+        for (i in relative.indices) {
+            val metres = altitudeMetres(i)
+            val eightBitLevel = oneLevelAt(metres) * DataExports.LEVELS_PER_SIDE / 127
+            val back = (metres / eightBitLevel).roundToInt().coerceIn(-127, 127) * eightBitLevel
+            worstLevelsAtEightBits =
+                maxOf(worstLevelsAtEightBits, abs(back - metres) / oneLevelAt(metres))
         }
 
         println(
-            "HEIGHTMAP worst error %.3e of the field's range (one grey level is %.3e); ".format(
-                worst, oneGreyLevel
-            ) + "the same field at 8 bits: %.3e, %.0f grey levels".format(
-                worstAtEightBits, worstAtEightBits / oneGreyLevel
-            )
+            "HEIGHTMAP worst error %.3f gray levels read through the sidecar; ".format(worstLevels) +
+                "the deepest cell, %.0f m, is gray %d; ".format(deepestMetres, deepestLevel) +
+                "the same altitudes at 8 bits miss by %.0f gray levels".format(worstLevelsAtEightBits)
+        )
+        assertEquals(0, inverseDisagrees, "cells whose encoder inverse is not the sidecar's formula")
+        assertTrue(
+            worstLevels <= 1.0,
+            "cell $worstAt, at ${altitudeMetres(worstAt)} m, came back $worstLevels gray levels" +
+                " from where it started through the sidecar's own formula"
+        )
+        // The sea's half spans its own full range: the deepest floor sits as far down the lower
+        // half as its depth is down the declared deepest ocean, not squeezed into the land's
+        // scale — and where a trench goes past the declared figure, it is the bottom of the range
+        // and lands on level 1. Squeezed into the land's scale it lands near 14,500.
+        val floorMetres = maxOf(scale.deepestOceanMetres.toDouble(), -deepestMetres)
+        assertEquals(
+            (seaLevel + deepestMetres / floorMetres * DataExports.LEVELS_PER_SIDE)
+                .roundToInt()
+                .toDouble(),
+            deepestLevel.toDouble(),
+            1.0,
+            "the deepest cell, $deepestMetres m, landed on gray $deepestLevel"
         )
         assertTrue(
-            worst <= oneGreyLevel,
-            "cell $worstAt came back $worst from where it started, past one grey level of $oneGreyLevel"
-        )
-        assertTrue(
-            worstAtEightBits > oneGreyLevel,
+            worstLevelsAtEightBits > 1.0,
             "eight bits would have passed this bar too, so the bar proves nothing"
         )
         assertTrue(
@@ -277,17 +324,25 @@ class DataExportTest {
         )
         assertClose(scale.highestLandMetres.toDouble(), json.number("highestLandMetres"))
         assertClose(scale.deepestOceanMetres.toDouble(), json.number("deepestOceanMetres"))
-        // And the figures a reader actually multiplies by: one grey level in metres on each side
-        // of the waterline, and where each end of the range lands. Blackness must be the full
-        // declared depth; whiteness is the *heightmap's* ceiling, which since I1 is taller than
-        // the land's own ruler because the field carries the ice standing on the ground as well as
-        // the ground — see [DataExports.heightmapCeilingRulers]. A reader multiplying by
-        // `metresPerGreyLevel` gets metres either way, which is the whole job of the sidecar.
+        // And the figures a reader actually multiplies by: one gray level in meters on each side
+        // of the waterline, and where each end of the range lands. The darkest level is at least
+        // the full declared depth, and deeper on a world whose trench goes past it; whiteness is
+        // the *heightmap's* ceiling, which since I1 is taller than the land's own ruler because
+        // the field carries the ice standing on the ground as well as the ground — see
+        // [DataExports.heightmapScale]. A reader multiplying by the stated figures gets meters
+        // either way, which is the whole job of the sidecar; that they are the figures the file
+        // was written at is held by the round trip above.
+        assertEquals(DataExports.SIDECAR_VERSION, json.int("sidecarVersion"))
         val ceilingMetres = json.number("heightmapCeilingMetres")
+        val floorMetres = json.number("heightmapFloorMetres")
         assertTrue(
             ceilingMetres > scale.highestLandMetres.toDouble(),
             "the heightmap's ceiling (${ceilingMetres}) has to clear the land's ruler" +
                 " (${scale.highestLandMetres}) or the ice standing on the ground will not fit"
+        )
+        assertTrue(
+            floorMetres >= scale.deepestOceanMetres.toDouble(),
+            "the heightmap's floor ($floorMetres) is above the sea's ruler (${scale.deepestOceanMetres})"
         )
         val metresPerLevel = json.number("metresPerGreyLevel")
         val metresPerLevelBelow = json.number("metresPerGreyLevelBelowSeaLevel")
@@ -299,7 +354,7 @@ class DataExportTest {
             metresPerLevel
         )
         assertClose(
-            scale.deepestOceanMetres.toDouble() / DataExports.LEVELS_PER_SIDE,
+            floorMetres / DataExports.LEVELS_PER_SIDE,
             metresPerLevelBelow
         )
         assertScaledFromPrinted(

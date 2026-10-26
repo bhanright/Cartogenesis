@@ -211,10 +211,14 @@ pixel dimensions (the grid's, one sample per cell, unlike the picture exports), 
 (40,075 km by default), the cell size east-west and north-south, the square kilometers per cell, the
 save format version and the build. **Sea level is gray level 32768 on every world**, fixed rather
 than derived per world, because its job is to be typed into somebody else's program. There are
-32767 levels either side of the waterline, and the sidecar states a meters-per-level figure for
-each half, because the vertical range is two numbers rather than one: at the defaults a level above
-the waterline is 0.1831 m and one below it 0.3052 m, so white is +6,000 m and black is -10,000 m.
-Land below the waterline is written as it is, not clamped — a basin the sea cannot reach drains out
+32767 levels either side of the waterline, each half spent in full on its own range, and the
+sidecar states a meters-per-level figure for each, because the vertical range is two numbers
+rather than one: at the defaults white is +10,776 m (the land's 6,000 m ruler plus Earth's thickest
+ice, since the heightmap carries the ice's surface), a level 0.3289 m, and level 1 is -10,000 m, a
+level 0.3052 m. Either end moves out to the world's own highest surface or deepest floor where one
+goes past it, and the sidecar states both ends; seed 42 at 512 runs from +10,928 m to -11,143 m.
+Every cell is written from its altitude in meters, so the sidecar's one formula reads land below
+the waterline and the sea floor alike. Land below the waterline is written as it is, not clamped — a basin the sea cannot reach drains out
 into a salt flat below sea level, which on seed 42 at 512 is 497 cells.
 
 Why the PNGs come out of this project's own encoder is in [docs/DEPLOYMENT.md](docs/DEPLOYMENT.md).

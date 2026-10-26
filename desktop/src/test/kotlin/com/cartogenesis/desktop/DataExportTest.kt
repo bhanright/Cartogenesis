@@ -91,7 +91,7 @@ class DataExportTest {
         // covers the ice standing on the ground as well as the ground: see
         // [DataExports.heightmapCeilingRulers]. The bar follows the encoding rather than being
         // restated, so it is still exactly one level and still forty times tighter than eight bits.
-        val ceilingRulers = DataExports.heightmapCeilingRulers(config)
+        val ceilingRulers = DataExports.heightmapCeilingRulers(world)
         val oneGreyLevel = ceilingRulers.toDouble() / DataExports.LEVELS_PER_SIDE
 
         var worst = 0.0

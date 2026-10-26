@@ -154,7 +154,8 @@ object DataExports {
     const val HIGHEST_GREY_LEVEL = 65535
 
     /**
-     * How much taller than the land's own ruler the heightmap's top has to be, to fit the ice.
+     * How much taller than the land's own ruler the heightmap's top has to be, to fit the ice, for
+     * a world whose ice stays within what Earth's does.
      *
      * The elevation field's contract is that `1` is `WorldScale.highestLandMetres` and that no
      * cell need reach it. I1 broke the second half: the field now carries the ice sheet's
@@ -165,12 +166,17 @@ object DataExports {
      * summit returned 0.1076 of the range from where it started, against a bar of one grey level.
      *
      * The factor is derived from the envelope guard rather than from those measurements, so that
-     * a world with more ice than any of them still fits: the highest surface the generator can
-     * produce is the highest ground plus the thickest ice it will draw, and that thickness is
-     * capped at [IceSheet.THICKEST_ICE_ON_EARTH_METRES], Bedmap2's deepest sounding. On the stock
-     * ruler that is 6,000 metres of land plus 4,776 of ice, or 1.796 rulers; a world configured
-     * with a shorter ruler gets a proportionally taller factor, which is why this is read off the
-     * world rather than written down as one number.
+     * a world with more ice than any of them still fits: the highest surface the generator is
+     * meant to produce is the highest ground plus the thickest ice it will draw, and that
+     * thickness is capped at [IceSheet.THICKEST_ICE_ON_EARTH_METRES], Bedmap2's deepest sounding.
+     * On the stock ruler that is 6,000 metres of land plus 4,776 of ice, or 1.796 rulers; a world
+     * configured with a shorter ruler gets a proportionally taller factor, which is why this is
+     * read off the world rather than written down as one number.
+     *
+     * That is the *intended* envelope, not a guarantee: the cap is held by `IceSheetTest`, which
+     * records worlds whose ice stands past it, and a sheet on high ground reads over it here. So
+     * the ceiling an export uses is [heightmapCeilingRulers], which never sits under the highest
+     * surface the world actually has.
      *
      * The cost is precision, and it is small: a grey level goes from 0.183 m to 0.329 m, still a
      * third of a metre over a range of ten kilometres, and the eight-bit control this is measured
@@ -183,8 +189,29 @@ object DataExports {
      * a save-format change and belongs to whoever takes that on; the sidecar and the export chip
      * both say plainly that what is written is the surface.
      */
-    fun heightmapCeilingRulers(config: WorldGenConfig): Float =
+    fun intendedHeightmapCeilingRulers(config: WorldGenConfig): Float =
         1f + IceSheet.THICKEST_ICE_ON_EARTH_METRES / config.scale.highestLandMetres
+
+    /**
+     * The heightmap's top for [world], in the elevation field's own units: the intended envelope
+     * ([intendedHeightmapCeilingRulers]), or the world's own highest surface where that stands
+     * above it.
+     *
+     * Read off the world because a bound has to hold for every world the generator can make, and
+     * the ice cap it is derived from is not enforced by the generator, only recorded when broken.
+     * A cell above the ceiling is clipped to white and cannot round-trip. Taking the larger of the
+     * two keeps the grey level the same across every world that stays inside the envelope, so
+     * their files remain comparable, and spends precision only on a world that needs it. At the
+     * world's own highest cell the ratio is exactly 1, so that cell lands on the top level
+     * without a margin.
+     */
+    fun heightmapCeilingRulers(world: WorldMap): Float {
+        var highestSurface = Float.NEGATIVE_INFINITY
+        for (value in world.sea.relativeElevation.data) {
+            if (value > highestSurface) highestSurface = value
+        }
+        return maxOf(intendedHeightmapCeilingRulers(world.config), highestSurface)
+    }
 
     fun greyLevelFor(relativeElevation: Float, ceilingRulers: Float): Int =
         (
@@ -209,8 +236,9 @@ object DataExports {
      * because the sea now has a depth of its own rather than borrowing the land's. The sidecar
      * states both, and both ends of the range, so a reader can convert either half.
      */
-    fun metresPerGreyLevel(config: WorldGenConfig): Double =
-        config.scale.highestLandMetres.toDouble() * heightmapCeilingRulers(config) / LEVELS_PER_SIDE
+    fun metresPerGreyLevel(world: WorldMap): Double =
+        world.config.scale.highestLandMetres.toDouble() *
+            heightmapCeilingRulers(world) / LEVELS_PER_SIDE
 
     /**
      * Metres of depth one grey level below the sea-level grey is worth.
@@ -278,7 +306,7 @@ object DataExports {
 
     private suspend fun heightmapPng(world: WorldMap, deflater: ZlibDeflater): ByteArray {
         val relative = world.sea.relativeElevation.data
-        val ceilingRulers = heightmapCeilingRulers(world.config)
+        val ceilingRulers = heightmapCeilingRulers(world)
         val samples = IntArray(relative.size) { greyLevelFor(relative[it], ceilingRulers) }
         return PngWriter.greyscale16(world.width, world.height, samples, deflater)
     }
@@ -368,7 +396,7 @@ object DataExports {
 
     private fun heightmapSidecar(world: WorldMap, appVersion: String, source: ExportedWorld): String {
         val config = world.config
-        val metresPerLevel = metresPerGreyLevel(config)
+        val metresPerLevel = metresPerGreyLevel(world)
         val metresPerLevelBelow = metresPerGreyLevelBelowSeaLevel(config)
         val json = JsonLines()
         common(json, world, DataLayer.HEIGHTMAP, appVersion, source)
@@ -384,7 +412,7 @@ object DataExports {
         json.number("metresAtGreyLevel0", metresPerLevelBelow * (0 - SEA_LEVEL_GREY_LEVEL))
         json.number(
             "heightmapCeilingMetres",
-            config.scale.highestLandMetres.toDouble() * heightmapCeilingRulers(config)
+            config.scale.highestLandMetres.toDouble() * heightmapCeilingRulers(world)
         )
         json.text(
             "heightmapCarries",

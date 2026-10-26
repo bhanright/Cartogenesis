@@ -105,7 +105,7 @@ class CombGuardTest : BorrowsSharedWorlds() {
         // columns, 0.20 against 0.08 and 0.44 against 0.12 (docs/DESIGN_LEDGER.md, TH1-1; docs/TODO.md).
         KnownFailures.expect(
             "TH1-1: on the history's worlds the flanks are combed down the columns past the factor",
-            "seed 7 0.28 down a column and 0.03 along a row; seed 42 0.18 down a column and 0.03 along a row"
+            "seed 42 0.18 down a column and 0.11 along a row"
         ) {
             if (oneSided.isNotEmpty()) {
                 throw RecordedViolation(

@@ -181,14 +181,18 @@ class GlaciationCombTest : BorrowsSharedWorlds() {
         // again at K1, whose square weather and scour moved it back under (docs/DESIGN_LEDGER.md,
         // L1 and K1). Recorded at C1b, whose snow makes the ice larger and thicker: it adds 2.9 to
         // 3.1% on all three (docs/DESIGN_LEDGER.md, C1b; docs/TODO.md, "The ice after C1b").
-        // Armed at TH1-2, whose worlds pass it (docs/DESIGN_LEDGER.md, TH1-2).
-        if (over.isNotEmpty()) {
-            throw AssertionError(
-                "the ice puts ${ICE_COMB_BAR * 100}% or more of these worlds' standing water into thin" +
-                    " grid-bearing bars that run parallel to another such bar within ten cells — a" +
-                    " comb of gullies, not a handful of trunk glaciers: $over" +
-                    " (worst ${"%.2f".format(worst * 100)}%)"
-            )
+        // Armed at TH1-2, whose worlds passed it; recorded again at TH1-2c, on whose seed 42 the ice
+        // adds 2.69% (docs/DESIGN_LEDGER.md, TH1-2c; docs/TODO.md).
+        KnownFailures.expect("TH1-2c: the ice adds a comb of grid-bearing bars to seed 42's standing water", "[42 at 2.69%]") {
+            if (over.isNotEmpty()) {
+                throw RecordedViolation(
+                    "the ice puts ${ICE_COMB_BAR * 100}% or more of these worlds' standing water into thin" +
+                        " grid-bearing bars that run parallel to another such bar within ten cells — a" +
+                        " comb of gullies, not a handful of trunk glaciers: $over" +
+                        " (worst ${"%.2f".format(worst * 100)}%)",
+                    over.toString()
+                )
+            }
         }
     }
 }

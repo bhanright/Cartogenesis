@@ -262,7 +262,7 @@ class MeanCirculationEarthTest : BorrowsSharedWorlds() {
         // Recorded at W2h, where it was written: the winter hemisphere's highest pressure over the
         // sea stands at 22 to 26 degrees on every seed, with the winter ridge, six to ten degrees
         // equatorward of Earth's (the ridge's own clause above; docs/TODO.md).
-        KnownFailures.expect("W2h: the subtropical highs stand equatorward of Earth's", "29.9") {
+        KnownFailures.expect("W2h: the subtropical highs stand equatorward of Earth's", "30.2") {
             if (latitude < HIGH_LATITUDE_NEAREST || latitude > HIGH_LATITUDE_FARTHEST) {
                 throw RecordedViolation("the highs pooled at %.1f degrees, Earth's %.1f to %.1f".format(latitude, HIGH_LATITUDE_NEAREST, HIGH_LATITUDE_FARTHEST), "%.1f".format(latitude))
             }

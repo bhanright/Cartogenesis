@@ -88,7 +88,7 @@ class IceSheetTest : BorrowsSharedWorlds() {
         // there is the opposite miss). See docs/DESIGN_LEDGER.md, Fix 2 and C1b. Recorded at TH1-2,
         // whose site world 718106 carries a sheet again, 1,642 m thick over 509 km
         // (docs/DESIGN_LEDGER.md, TH1-2; docs/TODO.md).
-        KnownFailures.expect("TH1-2: the site world's sheet stands thinner than Greenland's divide", "seed 718106 at 1642 m over 509 km") {
+        KnownFailures.expect("TH1-2: the site world's sheet stands thinner than Greenland's divide", "seed 718106 at 1948 m over 548 km") {
             if (thin.isNotEmpty()) {
                 throw RecordedViolation(
                     "sheets whose middles stand $CONTINENTAL_MARGIN_KM km or more from their margins are thinner " +

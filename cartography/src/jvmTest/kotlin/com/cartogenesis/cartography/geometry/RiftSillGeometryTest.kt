@@ -90,7 +90,7 @@ class RiftSillGeometryTest {
         // for hundreds of kilometers now (1,078 km north-south, 1,805 km east-west; seeds 1 to 28
         // carry one way or the other, or a north-south rift of 316 km or less), which stands in
         // (docs/DESIGN_LEDGER.md, TH1-2c).
-        KnownFailures.expect("TH1-1: the history's rifts are too short for every detector", "north-south straight aligned side could not be measured; north-south straight facets could not be measured; north-south creases could not be measured; east-west straight facets could not be measured") {
+        KnownFailures.expect("TH1-1: the history's rifts are too short for every detector", "east-west straight facets could not be measured") {
             if (failures.isNotEmpty()) {
                 throw RecordedViolation("a rift's sills run straight: $failures", failures.joinToString("; ") { it.substringBefore(":") })
             }

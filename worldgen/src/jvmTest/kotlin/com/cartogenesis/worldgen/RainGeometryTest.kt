@@ -150,16 +150,13 @@ class RainGeometryTest : BorrowsSharedWorlds() {
         // 371 and 718 km, 491 pooled against main's 487, seed 7's the longest again, 631 km on W2e's
         // ground (docs/TODO.md, "The desert's edge along the belts' factor").
         // Armed at TH1-1, whose worlds passed it; recorded at TH1-2, on whose worlds the isohyet ends
-        // along a row at 590 km pooled (docs/DESIGN_LEDGER.md, TH1-2; docs/TODO.md).
-        KnownFailures.expect("TH1-2: on the history's new worlds the 250 mm isohyet ends along a row past main's", "590.22") {
-            if (dryEdge.average() > MAIN_DRY_ROW_EDGE_KM.average()) {
-                throw RecordedViolation(
-                    "the 250 mm isohyet's straightest edge along a row: %.2f pooled against main's %.2f"
-                        .format(dryEdge.average(), MAIN_DRY_ROW_EDGE_KM.average()),
-                    "%.2f".format(dryEdge.average())
-                )
-            }
-        }
+        // along a row at 590 km pooled (docs/DESIGN_LEDGER.md, TH1-2; docs/TODO.md). Armed again at
+        // TH1-2c, whose worlds pass it (docs/DESIGN_LEDGER.md, TH1-2c).
+        assertTrue(
+            dryEdge.average() <= MAIN_DRY_ROW_EDGE_KM.average(),
+            "the 250 mm isohyet's straightest edge along a row: %.2f pooled against main's %.2f"
+                .format(dryEdge.average(), MAIN_DRY_ROW_EDGE_KM.average())
+        )
     }
 
 

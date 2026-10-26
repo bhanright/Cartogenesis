@@ -1,5 +1,39 @@
 # To do
 
+- **The unresolved relief breaks the erosion's ordering (TH1-2b, grown at TH1-2c; recorded as a known
+  failure, TH1-1c fixes it first).** Two clauses read one defect. `ImplicitIncisionTest` (the bounds
+  clause) finds, from round 0 on seed 42 at 256 rows, 19 cells of one row (cells 526 and 530 to 547)
+  graded to 10,160 to 10,168 m over a base of 10,082.7 m, 77 to 85 m above it (the list stops at its cap of
+  20 entries); `ReceiverClampTest` finds 2,085, 2,143 and 1,956 channel cells below the cell they drain
+  into over the twelve rounds on seeds 718106, 42 and 7 at 256 rows, against none before. Both began at
+  TH1-2b's commit 88f81118, which holds the relief finer than a cell above its channel, and TH1-2c's
+  square-root law grew them. The next chunk changes every world and is re-recorded anyway, so it should
+  fix the ordering first: the cell's graded level and the channel's must be read from the same surface.
+  2026-10-26, TH1-2c.
+- **The cover clause's realised share sits 8% past its tolerance at a metre's rate (TH1-2c, recorded;
+  float noise, not a bias).** `ClimateFedErosionTest`, "cover on the ground holds the incision back":
+  on seed 7 one cell at a law's rate of 1.07 m (the floor is 1 m) reads the realised share 1.08e-3 off
+  `e(1+F)/(1+eF)` against a tolerance of 1e-3, and the clause passed at 51e6b105. Read first: over seed
+  7's 7,023 cells under F 0.1 the signed departures average under 3e-5 in every band of the rate (2.7e-5
+  under 2 m, -2e-6 to 5 m, 1e-7 beyond), and the worst in a band falls as the rate rises, 1.1e-3 under 2 m,
+  4.7e-4 to 5 m, 1.9e-4 to 20 m, 5.6e-5 beyond: a millimeter of float height field over the cell's cut,
+  which is what the tolerance's own comment names. The tolerance is not widened. What would settle it is
+  a floor on the rate that leaves the quotient its three decimals (a few meters, not one), or the
+  shares read in a wider type; whoever re-records the tier decides which. 2026-10-26, TH1-2c.
+- **TH1-2c grew the Earth-likeness suite's failure set (recorded under `LAW_SETS_EVERY_CUT`; the
+  humid-channel regression is TH1-1c's to check).** On the final worlds seed 42's humid country
+  carries 1.52 times the channel per unit of land that its semi-arid country does (Moglen, Eltahir and
+  Bras have it below one; the pooled four read 1.10), seed 99's drainage density peaks in HUMID and
+  not in a dryland, and the pooled coast reads a box-counting dimension of 0.798 (it was 0.787 when
+  recorded; Earth's 1.25). The humid country's channel is the one to check first, together with the
+  ordering finding above: whether the relief held above a channel since TH1-2b is what lifts the
+  humid country's density is not yet measured. 2026-10-26, TH1-2c.
+- **The sheet mask's edge runs along a row again (TH1-2c, recorded under the geometry guard's
+  `ICE_EDGE_ALONG_A_ROW` name; TH1-1c or the next ice chunk).** `IceSheetTest`, "the sheet mask's
+  edge follows the ground": the largest sheet's longest straight run lies along bearing 0, 38 cells on
+  seed 718106 against 36.2 allowed and 45 on seed 7 against 42.4. It is the crease the geometry census
+  records on the sheet's ground (seed 7: 44 cells at (917, 9) near the north pole), read by the mask's
+  own instrument; the two were not matched cell for cell. Rule 13. 2026-10-26, TH1-2c.
 - **The history's continents run straighter than Earth's at a tenth of the map (TH1-1, recorded;
   TH1-1b, measured again).** D3's straight-run instrument (windows a tenth of the map wide whose
   halves turn under 10 degrees, `CrustMeasures.straightShare`) reads the crust's edge at 0.30 pooled

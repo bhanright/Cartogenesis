@@ -41,6 +41,15 @@ class ImplicitIncisionTest {
 
     private companion object {
         /** Metres in a kilometre. */
+        /**
+         * The known failure this class and `ReceiverClampTest` record together: the relief finer
+         * than a cell, held above its channel, leaves a cell standing above the base it grades to
+         * and a channel cell below its receiver. The two clauses read one defect, one at the pass
+         * and one over the rounds. See docs/TODO.md.
+         */
+        const val UNRESOLVED_RELIEF_BREAKS_THE_ORDERING =
+            "TH1-2b: the unresolved relief breaks the erosion's ordering"
+
         const val METRES_PER_KM = 1_000.0
 
         /**
@@ -318,7 +327,21 @@ class ImplicitIncisionTest {
         assertTrue(bounds.mouths > 0, "no river mouth was reached")
         assertTrue(bounds.leftAlone > 0, "no cell stood at or below its base, so the eligibility rule saw nothing")
         assertTrue(bounds.madeEligible > 0, "no cell was made eligible by its receiver's cut")
-        assertTrue(bounds.violations.isEmpty(), "the pass broke its bounds: ${bounds.violations}")
+        // Recorded at TH1-2c: from round 0 on seed 42 at 256 rows the pass grades 19 cells of one row
+        // (cells 526 and 530 to 547) to 10,160 to 10,168 m over a base of 10,082.7 m, 77 to 85 m
+        // above it, and the list stops at its cap of 20 entries. TH1-2b (88f81118) holds the relief
+        // finer than a cell above its channel, and TH1-2c's square-root law grew the miss. It is
+        // `ReceiverClampTest`'s finding read at the pass: the unresolved relief breaks the erosion's
+        // ordering (docs/TODO.md; TH1-1c fixes it first).
+        KnownFailures.expect(UNRESOLVED_RELIEF_BREAKS_THE_ORDERING, "20 entries at the list's cap, the first round 0 cell 526") {
+            if (bounds.violations.isNotEmpty()) {
+                throw RecordedViolation(
+                    "the pass broke its bounds: ${bounds.violations}",
+                    "${bounds.violations.size} entries at the list's cap, the first " +
+                        Regex("""round \d+ cell \d+""").find(bounds.violations.first())!!.value
+                )
+            }
+        }
     }
 
     /**

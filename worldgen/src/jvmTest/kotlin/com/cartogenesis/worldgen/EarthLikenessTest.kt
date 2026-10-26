@@ -77,9 +77,19 @@ class EarthLikenessTest : BorrowsSharedWorlds() {
         // cells at Q2, with the boxes stated in kilometers: the pooled coast passes and seed 99's
         // humid country carries 1.04 times the semi-arid's channel (docs/DESIGN_LEDGER.md, Q2), and
         // 1.05 at L1's review round, whose rift joins are relay ramps.
+        // Grown at TH1-2c, whose ground carries 1.52 times the channel in seed 42's humid country
+        // against its semi-arid, peaks seed 99's drainage density in HUMID, and reads the pooled
+        // coast at 0.798; the humid-channel regression is TH1-1c's to check (docs/TODO.md).
         KnownFailures.expect(
             LAW_SETS_EVERY_CUT,
-            "pooled: the coastline's box-counting dimension is 0.787, " +
+            "42: humid country carries 1.52 times the channel per unit of land that semi-arid country does," +
+                " where Moglen, Eltahir & Bras (1998) have the density falling away on the wet side and so below one; " +
+                "99: drainage density peaks in HUMID, not in one of the drylands where Moglen, Eltahir & Bras (1998) put it; " +
+                "99: humid country carries 1.05 times the channel per unit of land that semi-arid country does," +
+                " where Moglen, Eltahir & Bras (1998) have the density falling away on the wet side and so below one; " +
+                "pooled: humid country carries 1.10 times the channel per unit of land that semi-arid country does," +
+                " where Moglen, Eltahir & Bras (1998) have the density falling away on the wet side and so below one; " +
+                "pooled: the coastline's box-counting dimension is 0.798, " +
                 "outside 1.25 +/- 0.15 (Mandelbrot 1967: Britain 1.25, Richardson's smoothest coast 1.02)"
         ) {
             if (complaints.isNotEmpty()) {

@@ -91,6 +91,15 @@ internal object GeometryFindings {
     const val LAKE_FANS_STAMPED = "lake fans have round rims"
 
     /**
+     * A lake fan is laid as a strand one cell thick along a row, and its outline doubles back at the
+     * strand's end: 99's at (884, 446) at 512 rows, the west end of seven cells of fan in row 446
+     * with no fan above or below them, a 173 degree turn between two straight runs along the row.
+     * The census at TH1-2c's head reads 99's fans with this crease, 7.04 against a bar of 6.15
+     * (docs/TODO.md).
+     */
+    const val LAKE_FAN_STRANDS = "a lake fan is laid as a strand one cell thick, doubling back at its end"
+
+    /**
      * A lake's shore follows a circular arc to within a quarter of a cell: 969495's at (1119, 1850)
      * at 2048, 233 degrees of a circle 10.5 cells across, first seen by 4a's census.
      */

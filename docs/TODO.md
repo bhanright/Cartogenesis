@@ -28,6 +28,14 @@
   recorded; Earth's 1.25). The humid country's channel is the one to check first, together with the
   ordering finding above: whether the relief held above a channel since TH1-2b is what lifts the
   humid country's density is not yet measured. 2026-10-26, TH1-2c.
+- **A lake fan is laid as a strand one cell thick, doubling back at its end (TH1-2c, recorded under
+  the geometry guard as `LAKE_FAN_STRANDS`; the next erosion chunk).** `GeometryGuardTest`, seed 99 at
+  512 rows, "lake fans" under the creases detector: 7.04 against a bar of 6.15, a 173 degree turn at
+  (884, 446). A dump of the deposition mechanism round it shows seven cells of fan in row 446
+  (columns 884 to 890) with none in the rows above or below, and a second strand of ten cells in row 447
+  (891 to 900) stepping one row down from its east end: two runs along a row meeting at a one-row step,
+  which is what the detector reads as a crease. Why the fan lies in strands is not traced. Rule 13.
+  2026-10-26, TH1-2c.
 - **The sheet mask's edge runs along a row again (TH1-2c, recorded under the geometry guard's
   `ICE_EDGE_ALONG_A_ROW` name; TH1-1c or the next ice chunk).** `IceSheetTest`, "the sheet mask's
   edge follows the ground": the largest sheet's longest straight run lies along bearing 0, 38 cells on

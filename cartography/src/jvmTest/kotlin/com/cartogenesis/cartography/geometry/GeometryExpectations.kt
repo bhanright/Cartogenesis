@@ -54,6 +54,7 @@ internal object GeometryExpectations {
         // Fix 3b and chunk 6 left, and cleared once the coast was drawn round the narrow sea.
         finding("coast as drawn", Detector.CORNER_RATE, F.COAST_SQUARE_NOTCH)
         finding("lake fans", Detector.ARCS, F.LAKE_FANS_STAMPED)
+        finding("lake fans", Detector.CREASES, F.LAKE_FAN_STRANDS)
         finding("river courses", Detector.ARCS, F.RIVER_ARC)
         // The drawn rivers are a selection of the traced courses, so an arc in one is the same arc
         // in the other where the pane keeps it: seed 1234's at 512 once the ground's ruler redrew it.
@@ -196,6 +197,7 @@ internal object GeometryExpectations {
         known("99/terrain contours/CREASES", "3@(810,8)=9.799 +(983,11)(913,451)")
         known("99/ice occupancy/ALIGNED_SIDE", "1@(963,2)=95.00")
         known("99/ice surface/FACETS", "1@(458,24)=53.15")
+        known("99/lake fans/CREASES", "1@(884,446)=7.036")
         known("99/peoples' borders/CREASES", "1@(918,451)=8.553")
         known("99/plate boundaries/ALIGNED_SIDE", "4@(488,7)=65.00 +(665,9)(366,11)(734,11)")
         known("99/plate boundaries/FACETS", "6@(703,10)=124.0 +(487,7)(488,7)(422,9)(734,11)(740,480)")

@@ -22,7 +22,7 @@ plugins {
  *   :desktop:test         1 worker  x 6 processors, 3 GB heap           6 threads,  3 GB
  *   :desktop:siteTest     1 worker, 0.5 GB heap, only after :desktop:test (one project, one lock)
  *   :cartography:jvmTest  1 worker  x 1 processor, 2 GB heap            1 thread,   2 GB
- *   :ui:jvmTest           1 worker  x 1 processor, 0.5 GB heap          1 thread,   0.5 GB
+ *   :ui:jvmTest           1 worker  x 1 processor, 1 GB heap            1 thread,   1 GB
  *   the workers' memory outside their heaps, measured                               1.9 GB
  *   the Gradle daemon and its launcher, and the compiler's daemon idle, measured    1.4 GB
  *                                                                      16 threads, 22.8 GB
@@ -59,6 +59,7 @@ extra["worldgenTestHeap"] = "3584m"
 extra["desktopTestProcessors"] = if (machineIsShared) hardwareThreads * 3 / 8 else hardwareThreads
 extra["desktopTestHeap"] = "3g"
 extra["cartographyTestHeap"] = "2g"
+extra["uiTestHeap"] = "1g"
 
 /*
  * The deep tiers' share, set apart from the per-merge tier's since W2e's two-layer climate: a

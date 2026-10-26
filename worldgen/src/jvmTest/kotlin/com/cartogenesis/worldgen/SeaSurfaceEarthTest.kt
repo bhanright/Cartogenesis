@@ -8,6 +8,7 @@ import kotlin.math.PI
 import kotlin.math.abs
 import kotlin.math.cos
 import kotlin.test.Test
+import kotlin.test.assertTrue
 
 /**
  * The finished world's sea surface and the planet's mean temperature against Earth's, on the
@@ -46,7 +47,6 @@ class SeaSurfaceEarthTest : BorrowsSharedWorlds() {
         const val JONES_C = 14.0
 
         const val TROPICAL_SEA_COLD = "W2c: the tropical sea stands under Earth's"
-        const val PLANET_COLD = "W2c: the planet's mean stands under Earth's on worlds of more or higher land"
     }
 
     /** The open sea's annual surface from 10 S to 10 N, degrees Celsius, by area. */
@@ -92,7 +92,7 @@ class SeaSurfaceEarthTest : BorrowsSharedWorlds() {
                 .format(seaC, OISST_TROPICS_C, OISST_TROPICS_NORTH_C, OISST_TROPICS_SOUTH_C))
             if (abs(seaC - OISST_TROPICS_C) > TROPICS_ENVELOPE_C) misses += "seed $seed %+.2f".format(seaC - OISST_TROPICS_C)
         }
-        KnownFailures.expect(TROPICAL_SEA_COLD, "seed 7 -0.59; seed 42 -0.56; seed 1234 -0.55; seed 99 -0.62") {
+        KnownFailures.expect(TROPICAL_SEA_COLD, "seed 7 -0.54; seed 42 -0.59; seed 1234 -0.56; seed 99 -0.59") {
             if (misses.isNotEmpty()) {
                 throw RecordedViolation("the tropical sea stands outside Earth's halves: ${misses.joinToString("; ")}", misses.joinToString("; "))
             }
@@ -108,10 +108,8 @@ class SeaSurfaceEarthTest : BorrowsSharedWorlds() {
                 .format(meanC, JONES_C, JONES_NORTH_C, JONES_SOUTH_C))
             if (meanC !in JONES_SOUTH_C..JONES_NORTH_C) misses += "seed $seed %.2f C".format(meanC)
         }
-        KnownFailures.expect(PLANET_COLD, "seed 7 12.76 C; seed 1234 12.76 C") {
-            if (misses.isNotEmpty()) {
-                throw RecordedViolation("the planet's mean stands outside Earth's hemispheres: ${misses.joinToString("; ")}", misses.joinToString("; "))
-            }
-        }
+        // Recorded again at TH1-1, on whose worlds two seeds' planets stood under Earth's southern
+        // hemisphere; armed at TH1-2, whose worlds pass it (docs/DESIGN_LEDGER.md, TH1-2).
+        assertTrue(misses.isEmpty(), "the planet's mean stands outside Earth's hemispheres: ${misses.joinToString("; ")}")
     }
 }

@@ -3,6 +3,7 @@ package com.cartogenesis.worldgen
 import com.cartogenesis.worldgen.model.WorldGenConfig
 import com.cartogenesis.worldgen.pipeline.ClimateStage
 import com.cartogenesis.worldgen.pipeline.EnergyBalance
+import com.cartogenesis.worldgen.pipeline.OceanCirculation
 import com.cartogenesis.worldgen.pipeline.OceanStage
 import kotlin.math.PI
 import kotlin.math.abs
@@ -50,11 +51,25 @@ class OceanCurrentTest : BorrowsSharedWorlds() {
         // alone solves on every standard world, seed 42 at 256 rows included, so K1's stall no
         // longer holds here, nor in the three other clauses that read the control.
         val failures = ArrayList<String>()
+        val stalled = ArrayList<String>()
         for (seed in SharedWorlds.STANDARD_SEEDS) {
             val world = SharedWorlds.world(WorldGenConfig.forRows(seed, SharedWorlds.COARSE_ROWS))
             val beltsOnly = world.config.copy(climate = world.config.climate.copy(pressureWinds = false))
-            val beltsOcean = OceanStage.generate(beltsOnly, world.sea)
+            val beltsOcean = try {
+                OceanStage.generate(beltsOnly, world.sea)
+            } catch (stall: OceanCirculation.OceanSolveFailure) {
+                println("OCEAN STALL seed $seed: ${stall.message}")
+                stalled += "seed $seed"
+                continue
+            }
             failures += OceanSense.check("seed $seed at ${SharedWorlds.COARSE_ROWS} rows", world.config, world.sea, world.ocean, beltsOcean)
+        }
+        // Recorded at TH1-1: on one of the history's worlds at 256 rows the control ocean under the
+        // belts' wind alone stops short of the solve's tolerance, as K1's seed 42 did until K2
+        // (docs/DESIGN_LEDGER.md, K1 and TH1-1; docs/TODO.md). The world itself solves.
+        // Armed at TH1-1, whose circulation hands stalled cycles to BiCGSTAB (`CirculationRescueTest`).
+        run {
+            if (stalled.isNotEmpty()) throw RecordedViolation("the circulation did not solve under the belts' wind alone on ${stalled.joinToString()}", stalled.joinToString())
         }
         // Recorded at A1-6b, whose wind is the seasonal circulation's: its easterly is weakest on the
         // equator, where the cross-equatorial air arrives calm, so its curl turns the interior east
@@ -62,7 +77,7 @@ class OceanCurrentTest : BorrowsSharedWorlds() {
         // three seeds the band's mean with it (docs/TODO.md).
         val trades = failures.filter { "the trades' band flows east" in it }
         assertTrue((failures - trades.toSet()).isEmpty(), (failures - trades.toSet()).joinToString("\n"))
-        KnownFailures.expect("A1-6b: under the circulation alone the trades' band flows east", "seed 7 at 256 rows: under the belts alone the trades' band flows east in the north (+0.0075 m/s); seed 1234 at 256 rows: under the belts alone the trades' band flows east in the north (+0.0007 m/s); seed 1234 at 256 rows: under the belts alone the trades' band flows east in the south (+0.0023 m/s); seed 99 at 256 rows: under the belts alone the trades' band flows east in the north (+0.0049 m/s)") {
+        KnownFailures.expect("A1-6b: under the circulation alone the trades' band flows east", "seed 7 at 256 rows: under the belts alone the trades' band flows east in the south (+0.0028 m/s); seed 42 at 256 rows: under the belts alone the trades' band flows east in the south (+0.0003 m/s); seed 1234 at 256 rows: under the belts alone the trades' band flows east in the south (+0.0009 m/s); seed 99 at 256 rows: under the belts alone the trades' band flows east in the north (+0.0010 m/s)") {
             if (trades.isNotEmpty()) throw RecordedViolation(trades.joinToString("\n"), trades.joinToString("; "))
         }
     }
@@ -95,7 +110,9 @@ class OceanCurrentTest : BorrowsSharedWorlds() {
         )
         // Recorded at K2, when settlement waited for the atlas overhaul on the Earth-sized planet,
         // and armed again at C1b, whose climate passes it, and on H1's ground under the coupled
-        // climate (docs/DESIGN_LEDGER.md, K2, C1b and M1).
+        // climate (docs/DESIGN_LEDGER.md, K2, C1b and M1). Recorded at TH1-2, on whose seed 42
+        // the cold coasts settled 1.5% better than the warm; armed again at TH1-2c, whose worlds
+        // pass it (docs/DESIGN_LEDGER.md, TH1-2c).
         val complaints = listOfNotNull(
             under.takeIf { it.isNotEmpty() }?.let { "cold coasts settled no worse than warm ones: $it" },
             "pooled %.1f%%".format((pooled - 1) * 100).takeIf { pooled <= 1.02 }

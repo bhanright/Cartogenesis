@@ -3,6 +3,7 @@ package com.cartogenesis.worldgen
 import com.cartogenesis.worldgen.model.PartialWorld
 import com.cartogenesis.worldgen.model.WorldGenConfig
 import com.cartogenesis.worldgen.model.WorldMap
+import com.cartogenesis.worldgen.pipeline.CrustMapAccelerator
 import com.cartogenesis.worldgen.pipeline.ErosionAccelerator
 import com.cartogenesis.worldgen.pipeline.IceSheetAccelerator
 import com.cartogenesis.worldgen.pipeline.MoistureAccelerator
@@ -28,8 +29,9 @@ fun WorldGenerationEngine.generateBlocking(
     oceanAccelerator: OceanAccelerator? = null,
     iceAccelerator: IceSheetAccelerator? = null,
     moistureAccelerator: MoistureAccelerator? = null,
+    crustAccelerator: CrustMapAccelerator? = null,
     capture: LayerCapture? = null,
     progress: GenerationProgress = GenerationProgress { _, _, _ -> }
 ): WorldMap = runBlocking {
-    generate(config, previous, accelerator, oceanAccelerator, iceAccelerator, moistureAccelerator, capture, progress)
+    generate(config, previous, accelerator, oceanAccelerator, iceAccelerator, moistureAccelerator, crustAccelerator, capture, progress)
 }

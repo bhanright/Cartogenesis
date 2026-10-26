@@ -85,14 +85,17 @@ class IncrementalReuseTest {
                 isostasy = base.isostasy.copy(elasticThicknessKm = base.isostasy.elasticThicknessKm * 2f)
             ),
             "isostasyOff" to base.copy(isostasy = base.isostasy.copy(enabled = false)),
+            // The island arcs' rate, since the collisional and Andean belts' rock rises at the crust's
+            // own thickening rate (TH1-2) and their stamped rates no longer reach the world.
             "uplift" to base.copy(
-                tectonics = base.tectonics.copy(collisionUpliftMmPerYear = 0f)
+                tectonics = base.tectonics.copy(islandArcUpliftMmPerYear = 0f)
             ),
-            // H1's knobs live on the same section, so the tectonics guard already covers them —
-            // but only if a case actually moves one, and the history is the largest change that
-            // section can make: it rewrites the height field every later stage is built on.
+            // The tectonic history's knobs live on the same section, so the tectonics guard already
+            // covers them — but only if a case actually moves one, and the history is the largest
+            // change that section can make: it rewrites the height field every later stage is
+            // built on.
             "tectonicHistory" to base.copy(
-                tectonics = base.tectonics.copy(historyEpochs = 1)
+                tectonics = base.tectonics.copy(historyLengthMyr = base.tectonics.historyLengthMyr / 2)
             ),
             "erosion" to base.copy(erosion = base.erosion.copy(enabled = false)),
             // S3: the rounds cut with a provisional climate, so switching that feed off changes
@@ -321,7 +324,17 @@ class IncrementalReuseTest {
                 seafloorHalfSpreadingRateKmPerMyr =
                     world.plates.seafloorHalfSpreadingRateKmPerMyr,
                 upliftRateMmPerYear = field(world.plates.upliftRateMmPerYear),
-                crustAge = field(world.plates.crustAge)
+                crustAgeMyr = field(world.plates.crustAgeMyr),
+                crustThicknessKm = field(world.plates.crustThicknessKm),
+                orogenicExcessKm = field(world.plates.orogenicExcessKm),
+                orogenyKind = world.plates.orogenyKind.copyOf(),
+                terraneId = world.plates.terraneId.copyOf(),
+                riftAgeMyr = field(world.plates.riftAgeMyr),
+                rockErodibility = field(world.plates.rockErodibility),
+                windowTectonicKm = field(world.plates.windowTectonicKm),
+                windowWearKm = field(world.plates.windowWearKm),
+                windowOnsetMyrAgo = field(world.plates.windowOnsetMyrAgo),
+                exposureWindowMyr = world.plates.exposureWindowMyr
             ),
             erosion = ErosionResult(height = field(world.erosion.height)),
             sea = SeaLevelResult(

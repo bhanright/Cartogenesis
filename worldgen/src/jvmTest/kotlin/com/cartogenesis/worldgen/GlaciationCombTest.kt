@@ -123,16 +123,6 @@ class GlaciationCombTest : BorrowsSharedWorlds() {
                 // of the ice's work comes out as a rank of parallel gullies, and that is measured
                 // here against the water the ice had to work with.
                 .let { it.copy(erosion = it.erosion.copy(outletIncision = false)) }
-                // And H1's tectonic history off, for a reason of the same shape. Both figures are
-                // shares of the world's standing water, and the history changes how much of that
-                // there is and where: its worn old belts are broad, low-relief uplands, which is
-                // exactly the ground B4's two regimes divide between them, and a cold one sits
-                // near the boundary. On seed 42 the comb share reads 3.2% with the history off and
-                // 3.6% with it on, either side of a bar of 3.5% — a fortieth of the world's water
-                // moving between two categories, not a comb appearing. What the shipped world
-                // measures is asserted where it can be read against the un-glaciated world of the
-                // same seed: see `the author's 2048 world has no narrow straight water`.
-                .let { it.copy(tectonics = it.tectonics.copy(historyEpochs = 1)) }
             val world = SharedWorlds.world(config)
             val bare = SharedWorlds.world(
                 config.copy(glaciation = config.glaciation.copy(enabled = false))
@@ -171,12 +161,14 @@ class GlaciationCombTest : BorrowsSharedWorlds() {
         // Armed at A1-6b, whose ground holds none (docs/DESIGN_LEDGER.md, A1-6b). Recorded at F1:
         // one such lake on seed 42 and one on seed 7 at 1,024 rows, a rule 13 finding, not traced
         // (docs/TODO.md).
-        // Armed at W2b, whose ground holds none (docs/DESIGN_LEDGER.md, W2b).
+        // Armed at W2b, whose ground holds none (docs/DESIGN_LEDGER.md, W2b). Recorded at TH1-2: one
+        // such lake on seed 718106 and one on seed 7 at 1,024 rows, a rule 13 finding, not traced
+        // (docs/DESIGN_LEDGER.md, TH1-2; docs/TODO.md). Armed again at TH1-2c, whose ground holds
+        // none (docs/DESIGN_LEDGER.md, TH1-2c).
         if (straight.isNotEmpty()) {
-            throw RecordedViolation(
+            throw AssertionError(
                 signature + " lakes that are a straight one-cell line along a D8 bearing — a" +
-                    " trough is a valley the ice found, not a line drawn down a flow path",
-                signature
+                    " trough is a valley the ice found, not a line drawn down a flow path"
             )
         }
         // Collected and asserted once, rather than seed by seed, so a run reports all three figures
@@ -189,7 +181,9 @@ class GlaciationCombTest : BorrowsSharedWorlds() {
         // again at K1, whose square weather and scour moved it back under (docs/DESIGN_LEDGER.md,
         // L1 and K1). Recorded at C1b, whose snow makes the ice larger and thicker: it adds 2.9 to
         // 3.1% on all three (docs/DESIGN_LEDGER.md, C1b; docs/TODO.md, "The ice after C1b").
-        KnownFailures.expect("C1b: the larger ice adds a comb of grid-bearing bars to the standing water", "[718106 at 6.57%, 42 at 2.84%, 7 at 3.23%]") {
+        // Armed at TH1-2, whose worlds passed it; recorded again at TH1-2c, on whose seed 42 the ice
+        // adds 2.69% (docs/DESIGN_LEDGER.md, TH1-2c; docs/TODO.md).
+        KnownFailures.expect("TH1-2c: the ice adds a comb of grid-bearing bars to seed 42's standing water", "[42 at 2.69%]") {
             if (over.isNotEmpty()) {
                 throw RecordedViolation(
                     "the ice puts ${ICE_COMB_BAR * 100}% or more of these worlds' standing water into thin" +

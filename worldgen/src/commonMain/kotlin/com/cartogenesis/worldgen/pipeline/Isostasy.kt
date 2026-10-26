@@ -6,6 +6,7 @@ import com.cartogenesis.worldgen.model.IsostasyConfig
 import com.cartogenesis.worldgen.model.WorldGenConfig
 import kotlin.math.PI
 import kotlin.math.exp
+import kotlin.math.sin
 import kotlin.math.sqrt
 
 /**
@@ -128,6 +129,73 @@ internal object Isostasy {
                 oceanicBuoyantMass) / mantleDensity
 
         /**
+         * The heat still in continental lithosphere stretched [riftAgeMyr] million years ago, as the
+         * air-equivalent metres of buoyancy it is worth: McKenzie's thermal subsidence still to come
+         * (*Some remarks on the development of sedimentary basins*, EPSL 40, 1978).
+         *
+         * Stretching by beta thins the mantle lithosphere with the crust and hot asthenosphere wells
+         * up under it, so a margin first subsides only by what its thinner crust takes away less
+         * what the heat gives back, and sinks the rest of the way as the heat leaves it: by
+         * `E0 (beta / pi) sin(pi / beta) (1 - exp(-t / tau))` under water, `tau` the plate's thermal
+         * time constant and `E0 = 4 a rho_m alpha T1 / (pi^2 (rho_m - rho_w))`. The same plate
+         * cooling under a ridge sinks the ocean floor from its ridge depth to its abyssal asymptote,
+         * `rho_m alpha T1 a / (2 (rho_m - rho_w))`, so `E0` is `8 / pi^2` of Parsons and Sclater's
+         * 3,900 m and `tau` is their 62.8 Myr: the margin's heat is read off the same plate as the
+         * ocean's, and a margin that has cooled for good stands where the crust's thinning alone puts
+         * it, as [altitudeMetres]'s Airy column did before this term. Beta is the standard column's
+         * thickness over the crust's, at least one. Zero where the crust was never stretched.
+         */
+        fun stretchedThermalBuoyancyMetres(thicknessKm: Float, riftAgeMyr: Float): Float {
+            if (riftAgeMyr < 0f || thicknessKm <= 0f) return 0f
+            val beta = (isostasy.continentalCrustThicknessKm / thicknessKm).coerceAtLeast(1f)
+            if (beta <= 1f) return 0f
+            val plateSubsidenceMetres = isostasy.seafloorAbyssalAsymptoteMetres - isostasy.seafloorRidgeDepthMetres
+            val initialWaterLoadedMetres = MCKENZIE_THERMAL_SHARE_OF_PLATE * plateSubsidenceMetres
+            val remaining = (beta / PI.toFloat()) * sin(PI.toFloat() / beta) *
+                exp(-riftAgeMyr / isostasy.seafloorFlatteningTimeMyr)
+            return initialWaterLoadedMetres * remaining * (mantleDensity - waterDensity) / mantleDensity
+        }
+
+        /**
+         * The heat of a back-arc's mantle, as the air-equivalent metres of buoyancy it is worth over
+         * a craton's, for crust whose subduction stopped [backArcAgeMyr] million years ago (0 where
+         * its trench is live); zero where it never stood behind one.
+         *
+         * Back-arcs are hot across their whole width, extended or not, their lithosphere about 60 km
+         * thick over a mantle the slab's water keeps convecting, where a craton's is 200 to 250 km
+         * (Hyndman, Currie and Mazzotti, *Subduction zone backarcs, mobile belts, and orogenic heat*,
+         * GSA Today 15(2), 2005; Currie and Hyndman, *The thermal structure of subduction zone back
+         * arcs*, JGR 111, 2006). They stand high on thin crust for it: the North American
+         * Cordillera stands [HOT_BACK_ARC_BUOYANCY_METRES] above the Canadian Shield at the same
+         * crustal thickness, and western Europe as far above the Fennoscandian Shield (Hyndman,
+         * *Tectonic consequences of a uniformly hot backarc and why is the Cordillera mountain belt
+         * high?*, Geoscience Canada 42, 2015, figure 6, after Hyndman and Currie 2011).
+         *
+         * When the subduction stops the convection stops with it, within a few tens of millions of
+         * years, and the back-arc cools by conduction toward a craton's lithosphere: Currie and
+         * Hyndman's model is a plate 250 km thick cooling from the back-arc's geotherm, the same
+         * problem as the ocean floor's plate. Its time constant is the plate's thickness squared
+         * over `pi^2 kappa`, so it is Parsons and Sclater's for their 125 km plate scaled by the
+         * square of the thicknesses ([backArcCoolingTimeMyr], 251 Myr). Their compilations of heat
+         * flow against the last thermotectonic event give "about 300 Myr" (2006) and 300 to 500 Myr
+         * (2015); the northern Canadian Cordillera, cut off at 40 to 50 Ma, is as hot as a live
+         * back-arc, and the Appalachians, about 260 Myr on, keep 600 to 800 m of it.
+         */
+        fun hotBackArcBuoyancyMetres(backArcAgeMyr: Float): Float {
+            if (backArcAgeMyr < 0f) return 0f
+            return HOT_BACK_ARC_BUOYANCY_METRES * exp(-backArcAgeMyr / backArcCoolingTimeMyr)
+        }
+
+        /**
+         * The back-arc's cooling time constant, Myr: the ocean floor's plate time constant
+         * ([IsostasyConfig.seafloorFlatteningTimeMyr], Parsons and Sclater's 62.8 Myr for a plate
+         * of [OCEAN_PLATE_THICKNESS_KM]) times the square of [CRATON_LITHOSPHERE_THICKNESS_KM] over
+         * it, the diffusion time of the thicker plate at the same diffusivity.
+         */
+        val backArcCoolingTimeMyr: Float =
+            isostasy.seafloorFlatteningTimeMyr * (CRATON_LITHOSPHERE_THICKNESS_KM / OCEAN_PLATE_THICKNESS_KM).let { it * it }
+
+        /**
          * The altitude a column floats at, for a cell that is [continentalShare] continental crust
          * of the rest oceanic and [seafloorAgeMyr] million years old where it is oceanic, carrying
          * [extraContinentalThicknessKm] of crust beyond the standard continental column.
@@ -136,25 +204,28 @@ internal object Isostasy {
          * margin is crust that has been stretched and thinned on its way out to the ocean floor,
          * so a cell halfway across one carries a column halfway between the two in thickness, in
          * density and in heat. That is where the shelf, the slope and the rise come from, and it
-         * is why [PlateStage] blurs the share across the plate boundary rather than stepping it.
+         * is why the map pass reads the share as a mixture of the tectonic history's crust rather
+         * than stepping it ([CrustMap]).
          *
-         * The extra thickness is the cratonic profile
-         * ([com.cartogenesis.worldgen.model.IsostasyConfig.cratonThickeningKm]) and is a signed
-         * figure with a mean of zero over the map's continental crust, so it tilts a continent
-         * without moving the datum. It buoys in proportion to the share, because it is continental
-         * crust that is being added and there is none of it to add on the ocean floor.
+         * The extra thickness is the history's own: the crust's thickness against the standard
+         * column, thinned where a margin was stretched and thickened where orogeny piled crust on
+         * ([PlateResult.crustThicknessKm]; docs/DESIGN_LEDGER.md, TH1-1). It buoys in proportion to
+         * the share, because it is continental crust that is being added and there is none of it
+         * to add on the ocean floor. [continentalHeatMetres] is the continent's own thermal buoyancy,
+         * [stretchedThermalBuoyancyMetres] where it was stretched, carried in the same proportion.
          */
         fun altitudeMetres(
             continentalShare: Float,
             seafloorAgeMyr: Float,
-            extraContinentalThicknessKm: Float = 0f
+            extraContinentalThicknessKm: Float = 0f,
+            continentalHeatMetres: Float = 0f
         ): Float {
             val share = continentalShare.coerceIn(0f, 1f)
             val extraBuoyantMass = share * extraContinentalThicknessKm * METRES_PER_KM *
                 (mantleDensity - isostasy.continentalCrustDensity)
             val buoyantMass = extraBuoyantMass +
                 oceanicBuoyantMass + share * (continentalBuoyantMass - oceanicBuoyantMass)
-            val buoyancy = (1f - share) * oceanicThermalBuoyancyMetres(seafloorAgeMyr)
+            val buoyancy = (1f - share) * oceanicThermalBuoyancyMetres(seafloorAgeMyr) + share * continentalHeatMetres
             val columnMass = datum + buoyantMass + mantleDensity * buoyancy
             return if (columnMass >= 0f) columnMass / mantleDensity
             else columnMass / (mantleDensity - waterDensity)
@@ -345,6 +416,33 @@ internal object Isostasy {
 
 /** Metres in a kilometre, for the thicknesses this file is handed in kilometres. */
 private const val METRES_PER_KM = 1_000.0f
+
+/**
+ * McKenzie's thermal subsidence of a stretched margin as a share of a plate's whole cooling
+ * subsidence: `E0 = 4 a rho_m alpha T1 / (pi^2 (rho_m - rho_w))` against a plate's
+ * `rho_m alpha T1 a / (2 (rho_m - rho_w))`, so `8 / pi^2`. See [Isostasy.Columns.stretchedThermalBuoyancyMetres].
+ */
+private val MCKENZIE_THERMAL_SHARE_OF_PLATE = 8f / (PI.toFloat() * PI.toFloat())
+
+/**
+ * A hot back-arc's elevation over a craton's at the same crustal thickness, metres: the offset
+ * between the North American Cordillera's and the Canadian Shield's lines of elevation against
+ * crustal thickness, about 1,600 m (Hyndman and Currie 2011, as Hyndman 2015 gives it in his figure
+ * 6), the measured figure for what Hyndman, Currie and Mazzotti (2005) first estimated from a
+ * mean 200 C to 150 km at 3.5e-5 a degree as "approximately ... 1 km". Thermal isostasy is the
+ * cause they give; a craton's lithosphere is cold and also chemically depleted, which is why its
+ * deficit is not the whole of its cold mantle's contraction.
+ */
+private const val HOT_BACK_ARC_BUOYANCY_METRES = 1_600f
+
+/**
+ * The plates the two thermal time constants belong to, km: Parsons and Sclater's ocean plate, 125
+ * km (*An analysis of the variation of ocean floor bathymetry and heat flow with age*, JGR 82,
+ * 1977, abstract), and the craton's lithosphere a back-arc cools toward, 250 km, the plate Currie
+ * and Hyndman (2006) let a back-arc cool in.
+ */
+private const val OCEAN_PLATE_THICKNESS_KM = 125f
+private const val CRATON_LITHOSPHERE_THICKNESS_KM = 250f
 
 /** Pascals in a gigapascal, for Young's modulus. */
 private const val PASCALS_PER_GPA = 1e9

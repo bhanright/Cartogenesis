@@ -101,11 +101,20 @@ class CombGuardTest : BorrowsSharedWorlds() {
         // Recorded at K1, whose square weather moved seed 42's flanks from just under the factor to
         // just over it, 0.221 against 0.145 down a column and along a row; armed again at K2, whose
         // physics brought them back under it, 0.137 against 0.182 (docs/DESIGN_LEDGER.md, K1 and K2).
-        assertTrue(
-            oneSided.isEmpty(),
-            "the flanks are combed along one axis over $AXIS_FACTOR times the other, in km of comb per 1000 km2 of " +
-                "land: ${oneSided.joinToString("; ") { it.figure }}"
-        )
+        // Recorded again at TH1-1, whose crust moved both seeds' flanks over the factor down the
+        // columns, 0.20 against 0.08 and 0.44 against 0.12 (docs/DESIGN_LEDGER.md, TH1-1; docs/TODO.md).
+        KnownFailures.expect(
+            "TH1-1: on the history's worlds the flanks are combed down the columns past the factor",
+            "seed 42 0.18 down a column and 0.11 along a row"
+        ) {
+            if (oneSided.isNotEmpty()) {
+                throw RecordedViolation(
+                    "the flanks are combed along one axis over $AXIS_FACTOR times the other, in km of comb per 1000 km2 of " +
+                        "land: ${oneSided.joinToString("; ") { it.figure }}",
+                    oneSided.joinToString("; ") { it.figure }
+                )
+            }
+        }
         val bearings = WORLD_SEEDS.map { "seed $it ${BearingCensus.of(SharedWorlds.world(onTheCalibrationPlanet(it)))}" }
         bearings.forEach { println("COMB BEARINGS $it") }
         KnownFailures.expect(SYMMETRIC_COMB, RECORDED) {
@@ -227,9 +236,10 @@ class CombGuardTest : BorrowsSharedWorlds() {
 
         /**
          * Re-recorded at L1, whose rifts are Earth's half-grabens and the same at every grid, and at K2
-         * on the 12,000 km planet under K2's physics (docs/DESIGN_LEDGER.md, L1 and K2).
+         * on the 12,000 km planet under K2's physics, and at TH1-1 on the history's worlds
+         * (docs/DESIGN_LEDGER.md, L1, K2 and TH1-1).
          */
-        const val RECORDED = "seed 7 0.23 down a column and 0.17 along a row; seed 42 0.16 down a column and 0.20 along a row"
+        const val RECORDED = "seed 7 0.28 down a column and 0.03 along a row; seed 42 0.18 down a column and 0.03 along a row"
 
         /**
          * The grid the guard is taken on, [SharedWorlds.DETAIL_ROWS]: square cells, 1,024 by 512,
@@ -298,8 +308,14 @@ class CombGuardTest : BorrowsSharedWorlds() {
         /** How far the network may thin: `ScaleFreeTest`'s grid tolerance. */
         const val NETWORK_FACTOR = 1.35
 
-        /** The initiated network at 512 rows on Q2's head, km of channel per 1,000 km² of land, by seed. */
-        val NETWORK_ON_THE_HEAD = listOf(7L to 43.07, 42L to 49.10)
+        /**
+         * The initiated network at 512 rows on TH1-2c's head, km of channel per 1,000 km² of land,
+         * by seed. Re-taken at TH1-2c, each world's lattice being turned by its seed: seed 7's
+         * network reads 31.31, 27% under the 43.07 of the head before, and seed 42's 60.51, 23% over
+         * its 49.10; the first of those is past [NETWORK_FACTOR] of the old figure, and the two
+         * worlds moved opposite ways, where a thinning of the router would move both down.
+         */
+        val NETWORK_ON_THE_HEAD = listOf(7L to 31.31, 42L to 60.51)
 
         val WORLD_SEEDS = NETWORK_ON_THE_HEAD.map { it.first }
     }

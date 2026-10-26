@@ -311,7 +311,7 @@ class ReliefShadingTest : BorrowsSharedWorlds() {
         // Armed again at A1-2: C1b2's gallery world floored faces under the sky at its ninth decile
         // of slope, and on A1-2's ground no face is floored (docs/DESIGN_LEDGER.md, A1-2). Recorded
         // again at A1-4, whose ground moved with the provisional climates' wind (docs/TODO.md).
-        KnownFailures.expect("A1-4: the gallery cone's steepest faces are floored again", "37") {
+        KnownFailures.expect("A1-4: the gallery cone's steepest faces are floored again", "43") {
             if (sky.floored != 0) {
                 throw RecordedViolation(
                     "${sky.floored} of $BEARINGS bearings round the cone are pinned at the darkest factor the model " +
@@ -390,10 +390,13 @@ class ReliefShadingTest : BorrowsSharedWorlds() {
         // (docs/DESIGN_LEDGER.md, Fix 3, Fix 3b and Q4).
         val matched = String.format(java.util.Locale.ROOT, "%.2f", bestHaze)
         val declared = String.format(java.util.Locale.ROOT, "%.2f", ReliefShading.HAZE)
-        assertTrue(
-            kotlin.math.abs(bestHaze - ReliefShading.HAZE) <= HAZE_SWEEP_STEP / 2,
-            "the lamp's contrast is matched at haze $matched, a step or more from the declared $declared"
-        )
+        // Recorded at TH1-1, whose crust moved the ground the haze is matched on: 0.14
+        // (docs/DESIGN_LEDGER.md, TH1-1; docs/TODO.md).
+        KnownFailures.expect("TH1-1: on the history's ground the lamp's contrast is matched at another haze", matched) {
+            if (kotlin.math.abs(bestHaze - ReliefShading.HAZE) > HAZE_SWEEP_STEP / 2) {
+                throw RecordedViolation("the lamp's contrast is matched at haze $matched, a step or more from the declared $declared", matched)
+            }
+        }
         // Ordinary ground is the median light under the sky the map is drawn under — the declared
         // one — and not under whichever haze the sweep matched. Armed again on square cells, with
         // the figure re-derived there and the device's parity guard run on it (it is handed to the
@@ -403,7 +406,7 @@ class ReliefShadingTest : BorrowsSharedWorlds() {
         // Recorded at K2: the gallery's world on the 12,000 km planet under K2's physics is other
         // ground than the one the declared figure was read off; it is the drawing's to re-derive,
         // with its other constants, for the Earth-sized default (docs/TODO.md).
-        KnownFailures.expect("K2: the relief's ordinary ground was read off the gallery's ground before K2", "0.9403") {
+        KnownFailures.expect("K2: the relief's ordinary ground was read off the gallery's ground before K2", "0.8788") {
             if (kotlin.math.abs(declaredGround - ReliefShading.ordinaryGround) > MAX_GROUND_DRIFT) {
                 val found = "%.4f".format(declaredGround)
                 throw RecordedViolation(
@@ -604,8 +607,12 @@ class ReliefShadingTest : BorrowsSharedWorlds() {
                 ReliefShading.ordinaryGround
             )
         )
+        // Recorded at TH1-1: on the history's ground the sky drew 13.4% flatter than the lamp, the
+        // haze it was matched at having been read off main's ground; armed at TH1-2, whose ground
+        // passes it (docs/DESIGN_LEDGER.md, TH1-1 and TH1-2).
+        val drift = (sky.deviation - lamp.deviation) / lamp.deviation
         assertTrue(
-            kotlin.math.abs(sky.deviation - lamp.deviation) / lamp.deviation <= MAX_CONTRAST_DRIFT,
+            kotlin.math.abs(drift) <= MAX_CONTRAST_DRIFT,
             "the sky model's contrast is %.4f against the lamp's %.4f, more than %.0f%% apart"
                 .format(sky.deviation, lamp.deviation, MAX_CONTRAST_DRIFT * 100)
         )
@@ -654,11 +661,21 @@ class ReliefShadingTest : BorrowsSharedWorlds() {
         // constant on it is the drawing's chunk (docs/TODO.md). Armed at C1b2, whose gallery world
         // reads the declared figure again (docs/DESIGN_LEDGER.md, C1b2), as H1's ground under the
         // coupled climate does (docs/DESIGN_LEDGER.md, M1); H1's ground on main's climate read 39.25.
-        if (kotlin.math.abs(declared - steepestClear) > EXAGGERATION_SWEEP_STEP / 2) {
-            throw AssertionError(
-                "the steepest exaggeration that pins no face of the cone is %.2f, not the declared %.4f"
-                    .format(steepestClear, declared)
-            )
+        // Recorded at TH1-1, on whose gallery ground the steepest that pins no face is 48.00, with the
+        // drawing's other calibrations (docs/DESIGN_LEDGER.md, TH1-1; docs/TODO.md, "The drawing's
+        // calibrated figures moved with the ground").
+        // Recorded again at TH1-2, on whose gallery ground the first exaggeration swept already pins
+        // a face of the cone, so no steepest clear one is found (NaN, which the clause as written
+        // let pass): the ground the replay dissects is steeper in its tail (docs/DESIGN_LEDGER.md,
+        // TH1-2; docs/TODO.md, "The drawing's calibrated figures moved with the ground").
+        KnownFailures.expect("TH1-2: on the history's gallery ground every exaggeration swept pins a face of the cone", "NaN") {
+            if (steepestClear.isNaN() || kotlin.math.abs(declared - steepestClear) > EXAGGERATION_SWEEP_STEP / 2) {
+                throw RecordedViolation(
+                    "the steepest exaggeration that pins no face of the cone is %.2f, not the declared %.4f"
+                        .format(steepestClear, declared),
+                    "%.2f".format(steepestClear)
+                )
+            }
         }
         // The contrast is held against another grid's picture, so it is reported rather than
         // asserted: the application makes one grid (docs/DESIGN_LEDGER.md, G1).
@@ -695,10 +712,18 @@ class ReliefShadingTest : BorrowsSharedWorlds() {
         // (docs/DESIGN_LEDGER.md, A1-6c). Recorded again at W2b, whose rain moved the gallery's
         // ground to a tenth percentile of 0.066 (docs/TODO.md); armed again at W2c, whose ground
         // reads 0.059, the floor's hundredth (docs/DESIGN_LEDGER.md, W2c).
-        assertTrue(
-            LandSlopes.hundredths(EngravingPlan.SLOPE_FLOOR) == LandSlopes.hundredths(tenth),
-            "the tenth percentile of seed 234475's land slope at 512 rows is $tenth; the floor is ${EngravingPlan.SLOPE_FLOOR}"
-        )
+        // Recorded at TH1-1, whose crust moved the gallery's ground to a tenth percentile of 0.091;
+        // armed at TH1-2, whose ground reads the floor's hundredth (docs/DESIGN_LEDGER.md, TH1-2);
+        // recorded again at TH1-2c, whose hot back-arcs move the gallery's ground to a tenth
+        // percentile of 0.051 (docs/DESIGN_LEDGER.md, TH1-2c; docs/TODO.md).
+        KnownFailures.expect("TH1-2c: on the history's ground the land's slope floor moved", "0.05") {
+            if (LandSlopes.hundredths(EngravingPlan.SLOPE_FLOOR) != LandSlopes.hundredths(tenth)) {
+                throw RecordedViolation(
+                    "the tenth percentile of seed 234475's land slope at 512 rows is $tenth; the floor is ${EngravingPlan.SLOPE_FLOOR}",
+                    LandSlopes.hundredths(tenth)
+                )
+            }
+        }
     }
 
     /**

@@ -76,7 +76,6 @@ class WorldLinkWorldTest {
         var config = start
         config = Knobs.oceanCoverage.set(config, 0.48f)
         config = Knobs.plates.set(config, 9)
-        config = Knobs.mountainHeight.set(config, 0.71f)
         config = Knobs.seasonalTiltDegrees.set(config, 21.5f)
         config = Knobs.rainShadow.set(config, 3.3f)
         config = Knobs.realms.set(config, 5)

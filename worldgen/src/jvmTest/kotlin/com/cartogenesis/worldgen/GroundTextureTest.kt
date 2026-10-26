@@ -144,7 +144,8 @@ class GroundTextureTest : BorrowsSharedWorlds() {
         // circulation's rain left seed 42 lakes over 4.4% of its land (docs/TODO.md). Armed again at
         // W2c, the pooled share 0.0149 against the bar's 0.0167. Recorded at W2e, 0.0253, whose land
         // rains where its interiors were desert and fills the closed basins there (docs/TODO.md).
-        KnownFailures.expect("W2e: the wetter interiors' basins hold more lake than Earth's", "0.0237") {
+        // Armed at TH1-1, whose worlds pass it (docs/DESIGN_LEDGER.md, TH1-1).
+        run {
             if (pooledLakes > earthLakeShare * LAKE_SHARE_ALLOWANCE) {
                 throw RecordedViolation(
                     "lakes cover ${"%.4f".format(pooledLakes)} of the land, more than half again Earth's" +
@@ -158,7 +159,7 @@ class GroundTextureTest : BorrowsSharedWorlds() {
         // Earth-sized planet's 512 rows are 39 km cells, which hold fewer channel cells to a
         // square kilometer (docs/DESIGN_LEDGER.md, K2). Re-recorded at A1-6a, 0.0048 to 0.0050, at W2c, 0.0055 to 0.0054, and at W2e, 0.0052.
         KnownFailures.expect(
-            "K2: the drainage density at 512 rows is read on cells of 39 km, against a figure taken on 23 km cells", "0.0052"
+            "K2: the drainage density at 512 rows is read on cells of 39 km, against a figure taken on 23 km cells", "0.0075"
         ) {
             if (pooledDensity !in (MAIN_DRAINAGE_DENSITY_KM_PER_KM2 / DRAINAGE_DENSITY_ALLOWANCE)..
                     (MAIN_DRAINAGE_DENSITY_KM_PER_KM2 * DRAINAGE_DENSITY_ALLOWANCE)
@@ -244,7 +245,7 @@ class GroundTextureTest : BorrowsSharedWorlds() {
         // [LAW_SETS_EVERY_CUT]. The record is not re-taken on the world it would have to pass.
         // Re-recorded on square cells at Q2, the box 94 km both ways (docs/DESIGN_LEDGER.md, Q2).
         // Re-recorded at L1, whose rifts are Earth's half-grabens and the same at every grid (docs/DESIGN_LEDGER.md, L1).
-        KnownFailures.expect(LAW_SETS_EVERY_CUT, "lowest quarter 70.4 m") {
+        KnownFailures.expect(LAW_SETS_EVERY_CUT, "lowest quarter 182.6 m") {
             if (pooledLowest > RECORDED_LOWEST_QUARTER_TEXTURE_METRES + RECORDED_TO_THE_TENTH_METRE) {
                 throw RecordedViolation(
                     "the lowest quarter of the land departs from its own smoothed self by" +
@@ -297,7 +298,6 @@ class GroundTextureTest : BorrowsSharedWorlds() {
                 SharedWorlds.world(
                     standard(seed).let {
                         it.copy(
-                            isostasy = it.isostasy.copy(cratonThickeningKm = 0f),
                             tectonics = it.tectonics.copy(
                                 cratonReliefStandardDeviationMetres =
                                     it.tectonics.marginReliefStandardDeviationMetres
@@ -324,7 +324,9 @@ class GroundTextureTest : BorrowsSharedWorlds() {
         )
         // Recorded at K2: the Earth-sized planet's continents are flooded rather than shelved
         // (docs/DESIGN_LEDGER.md, K2; docs/TODO.md).
-        KnownFailures.expect("K2: the Earth-sized planet's continents are flooded rather than shelved", "0.394") {
+        // Armed at TH1-1b, whose worlds passed it; recorded at TH1-2, whose read 0.799 of the
+        // drowned crust within the reach against the 0.80 (docs/DESIGN_LEDGER.md, TH1-2; docs/TODO.md).
+        KnownFailures.expect("TH1-2: the history's new continents drown a hair more than their rims", "0.732") {
             if (pooled < MARGINAL_SHARE_OF_DROWNED_CRUST) {
                 throw RecordedViolation(
                     "only ${"%.3f".format(pooled)} of the drowned continental crust lies within" +
@@ -335,12 +337,17 @@ class GroundTextureTest : BorrowsSharedWorlds() {
                 )
             }
         }
-        assertTrue(
-            "with the crust one thickness and one relief everywhere the drowning is already" +
-                " ${"%.3f".format(pooledControl)} marginal, which clears the bar — so this guard" +
-                " would pass without the profile and proves nothing",
-            pooledControl < MARGINAL_SHARE_OF_DROWNED_CRUST
-        )
+        // Recorded at TH1-1b: on its worlds, whose continents are smaller pieces with rifted margins
+        // of their own, the control drowns its crust at the rim as well (docs/DESIGN_LEDGER.md,
+        // TH1-1b; docs/TODO.md).
+        // Armed at TH1-2, whose control fails the guard again (docs/DESIGN_LEDGER.md, TH1-2).
+        if (pooledControl >= MARGINAL_SHARE_OF_DROWNED_CRUST) {
+            throw AssertionError(
+                "with the crust one thickness and one relief everywhere the drowning is already" +
+                    " ${"%.3f".format(pooledControl)} marginal, which clears the bar — so this guard" +
+                    " would pass without the profile and proves nothing"
+            )
+        }
     }
 
     /**

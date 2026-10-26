@@ -392,9 +392,11 @@ class GroundFiguresTest {
          * The lattices and reaches there are in the sources the day this was written, as a floor
          * under the reading: fewer means the reading broke, not that a lattice went away. The
          * reaches were four until C1b took the rain blur off whole cells and onto a Gaussian on the
-         * ground (`SphereBlur`), which reads no reach.
+         * ground (`SphereBlur`), which reads no reach. The lattices were fourteen until TH1-1 retired
+         * the plate stage's margin and warp lattices: the crust's noises are on the sphere
+         * (`SphereNoise`), which reads no lattice.
          */
-        const val MOST_LATTICES_EXPECTED = 14
+        const val MOST_LATTICES_EXPECTED = 13
         const val MOST_REACHES_EXPECTED = 3
 
         /** A declaration named for a count round the map, a frequency, a divisor or a share of the map. */

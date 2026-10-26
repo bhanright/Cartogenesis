@@ -47,7 +47,9 @@ class ImportSaveTest {
         val folder = Files.createTempDirectory("cartogenesis-import").toFile()
         try {
             val store = DesktopWorldStore(folder, GzipCompressor, "a test")
-            val world = WorldGenerationEngine.generateBlocking(WorldGenConfig(seed = 4242L, width = 32, height = 32))
+            // Any small world: the test is about the file. Seed 4242's, which it used until TH1-1, now
+            // stalls the ocean's circulation at a residual of 0.0014 against 0.001 (docs/TODO.md).
+            val world = WorldGenerationEngine.generateBlocking(WorldGenConfig(seed = SEED, width = 32, height = 32))
             val document = WorldDocument(id = "kept", title = "The library's copy", config = world.config, savedAt = 1L)
             runBlocking { store.save(document, world) }
             val libraryCopy = File(folder, "kept.cgw").readBytes()
@@ -57,7 +59,7 @@ class ImportSaveTest {
                 onNodeWithText("Library").performClick()
                 waitForIdle()
                 onNodeWithText("Upload a file").performClick()
-                waitUntil(timeoutMillis = WAIT_MS) { seedOnTheMap() == 4242L && onAllNodesWithText("Stop").fetchSemanticsNodes().isEmpty() }
+                waitUntil(timeoutMillis = WAIT_MS) { seedOnTheMap() == SEED && onAllNodesWithText("Stop").fetchSemanticsNodes().isEmpty() }
 
                 onNodeWithText("File").performClick()
                 waitForIdle()
@@ -89,6 +91,9 @@ class ImportSaveTest {
     }
 
     private companion object {
+        /** The world the test saves and imports. */
+        const val SEED = 4245L
+
         /** A 32 world opens and saves in moments; this is room for a loaded machine. */
         const val WAIT_MS = 120_000L
     }

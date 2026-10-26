@@ -120,7 +120,9 @@ object SeaLevelStage {
     /**
      * The percentile cut on its own, without the three rules that [apply] runs on top of it.
      *
-     * [seaLevelFraction] is the share of the world's cells to put under water, clamped to 0..1.
+     * [seaLevelFraction] is the share of the planet's surface to put under water, clamped to 0..1:
+     * of its area on the sphere, each cell weighing the cosine of its row's latitude, and not of the
+     * map's cells, which count a polar sea several times over (see [shorelineForFraction]).
      * [lowstandShareOfField] then drops the shoreline below where the percentile puts it, as a
      * fraction of the height field's whole range; at zero the arithmetic is the plain percentile
      * cut, to the last bit.
@@ -562,58 +564,89 @@ object SeaLevelStage {
         return current
     }
 
-    /** The height below which [submergedFraction] of the world's cells lie. */
-    private fun shorelineForFraction(height: FloatField, submergedFraction: Float): Float =
-        thresholdAtRank(height, (height.data.size * submergedFraction).toLong())
+    /**
+     * The height below which [submergedFraction] of the planet's surface lies, by area on the sphere.
+     *
+     * The map's cells are a degree of longitude wide at every latitude, so a cell at sixty degrees is
+     * half the ground of one at the equator and the map's rows near a pole count a sea many times
+     * over. The tectonic history lays its crust on the sphere, a share of its area, and on the map's
+     * cells that crust was a share that moved with its latitude: the same crust drew 0.35 of the
+     * cells where it lay near the equator and 0.47 where it lay toward a pole, and the cut that put
+     * the slider's share of cells under water landed hundreds of metres from the level the crust
+     * floats at (docs/DESIGN_LEDGER.md, TH1-1b). Weighing each cell by its area, the slider asks for
+     * the share of the planet the sea covers, which is what a share of an ocean is.
+     */
+    private fun shorelineForFraction(height: FloatField, submergedFraction: Float): Float {
+        val rowWeights = DoubleArray(height.height) { row ->
+            kotlin.math.cos(kotlin.math.PI / 2 - (row + 0.5) / height.height * kotlin.math.PI)
+        }
+        var total = 0.0
+        for (weight in rowWeights) total += weight * height.width
+        return thresholdAtWeight(height, rowWeights, submergedFraction * total)
+    }
 
     /**
-     * The height with exactly [targetRank] cells below it — resolved exactly, not to the nearest
-     * histogram bin.
+     * The height with [targetWeight] of the map's area below it, each cell weighing its row's
+     * [rowWeights] — resolved exactly, not to the nearest histogram bin.
      *
      * The histogram only brackets the answer, and taking the bracketing bin's lower edge instead
      * leaves every cell *inside* that bin above water, so the land fraction overshoots by whatever
      * share of the map the bin holds. That share is not small: a sea-level cut lands, by its
      * nature, in a lump of ocean floor at a near-uniform depth, and the bracketing bin has measured
      * as much as 5% of the map. A second pass over the few hundred cells of that one bin picks the
-     * height that puts exactly the right number of cells below it, for one extra scan and an array
-     * a few thousand floats long. See docs/DESIGN_LEDGER.md, B2.
+     * height that puts exactly the right area below it, for one extra scan and an array a few
+     * thousand long. See docs/DESIGN_LEDGER.md, B2.
      */
-    private fun thresholdAtRank(height: FloatField, targetRank: Long): Float {
+    private fun thresholdAtWeight(height: FloatField, rowWeights: DoubleArray, targetWeight: Double): Float {
         val lowest = height.min()
         val highest = height.max()
         if (highest - lowest <= 0f) return lowest
+        if (targetWeight <= 0.0) return lowest
 
         val binsPerUnitHeight = (HISTOGRAM_BINS - 1) / (highest - lowest)
         fun binOf(value: Float) =
             ((value - lowest) * binsPerUnitHeight).toInt().coerceIn(0, HISTOGRAM_BINS - 1)
 
-        val histogram = IntArray(HISTOGRAM_BINS)
-        for (value in height.data) histogram[binOf(value)]++
+        val columns = height.width
+        val histogram = DoubleArray(HISTOGRAM_BINS)
+        for (cell in height.data.indices) histogram[binOf(height.data[cell])] += rowWeights[cell / columns]
 
-        if (targetRank <= 0L) return lowest
-
-        var cellsBelowBracket = 0L
+        var weightBelowBracket = 0.0
         var bracketBin = HISTOGRAM_BINS - 1
         for (bin in 0 until HISTOGRAM_BINS) {
-            if (cellsBelowBracket + histogram[bin] >= targetRank) {
+            if (weightBelowBracket + histogram[bin] >= targetWeight) {
                 bracketBin = bin
                 break
             }
-            cellsBelowBracket += histogram[bin]
+            weightBelowBracket += histogram[bin]
         }
 
-        val bracketValues = FloatArray(histogram[bracketBin])
-        if (bracketValues.isEmpty()) return highest
+        var count = 0
+        for (value in height.data) if (binOf(value) == bracketBin) count++
+        if (count == 0) return highest
+        // Each bracketed cell as its height's bits beside its index, so one sort orders them by
+        // height and then by place, the same on every run.
+        val bracket = LongArray(count)
         var written = 0
-        for (value in height.data) {
-            if (binOf(value) == bracketBin) bracketValues[written++] = value
+        for (cell in height.data.indices) {
+            val value = height.data[cell]
+            if (binOf(value) == bracketBin) bracket[written++] = (sortableBits(value).toLong() shl 32) or cell.toLong()
         }
-        bracketValues.sort()
-        // Everything strictly below the returned value is sea, so the value wanted is the one with
-        // exactly `targetRank` cells beneath it: `cellsBelowBracket` of them under the bracketing
-        // bin, the rest inside it.
-        val indexInBracket = (targetRank - cellsBelowBracket).toInt()
-            .coerceIn(0, bracketValues.size - 1)
-        return bracketValues[indexInBracket]
+        bracket.sort()
+        // Everything strictly below the returned value is sea, so the value wanted is the first
+        // whose cells below it already hold the area asked for.
+        var below = weightBelowBracket
+        for (entry in bracket) {
+            val cell = (entry and 0xFFFFFFFFL).toInt()
+            if (below >= targetWeight) return height.data[cell]
+            below += rowWeights[cell / columns]
+        }
+        return height.data[(bracket.last() and 0xFFFFFFFFL).toInt()]
+    }
+
+    /** A float's bits arranged so that signed integer order is the floats' order. */
+    private fun sortableBits(value: Float): Int {
+        val bits = value.toRawBits()
+        return if (bits < 0) bits xor 0x7FFFFFFF else bits
     }
 }

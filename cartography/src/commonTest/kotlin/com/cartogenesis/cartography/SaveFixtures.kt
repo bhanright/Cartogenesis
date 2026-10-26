@@ -20,6 +20,7 @@ import com.cartogenesis.worldgen.pipeline.NormalField
 import com.cartogenesis.worldgen.pipeline.OceanResult
 import com.cartogenesis.worldgen.pipeline.Plate
 import com.cartogenesis.worldgen.pipeline.PlateResult
+import com.cartogenesis.worldgen.pipeline.OrogenyKind
 import com.cartogenesis.worldgen.pipeline.PlateType
 import com.cartogenesis.worldgen.pipeline.River
 import com.cartogenesis.worldgen.pipeline.RiverResult
@@ -76,7 +77,17 @@ internal object SyntheticWorlds {
                 seafloorHalfSpreadingRateKmPerMyr = 25.0,
                 continentalShare = field(),
                 upliftRateMmPerYear = field(),
-                crustAge = field()
+                crustAgeMyr = field(),
+                crustThicknessKm = field(),
+                orogenicExcessKm = field(),
+                orogenyKind = IntArray(cells) { it % OrogenyKind.entries.size },
+                terraneId = IntArray(cells) { if (it % 2 == 0) -1 else it },
+                riftAgeMyr = field(),
+                rockErodibility = field(),
+                windowTectonicKm = field(),
+                windowWearKm = field(),
+                windowOnsetMyrAgo = field(),
+                exposureWindowMyr = config.tectonics.exposureWindowMyr
             ),
             erosion = ErosionResult(field()),
             sea = SeaLevelResult(

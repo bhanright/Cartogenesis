@@ -1,5 +1,508 @@
 # To do
 
+- **The unresolved relief breaks the erosion's ordering (TH1-2b, grown at TH1-2c; recorded as a known
+  failure, TH1-1c fixes it first).** Two clauses read one defect. `ImplicitIncisionTest` (the bounds
+  clause) finds, from round 0 on seed 42 at 256 rows, 19 cells of one row (cells 526 and 530 to 547)
+  graded to 10,160 to 10,168 m over a base of 10,082.7 m, 77 to 85 m above it (the list stops at its cap of
+  20 entries); `ReceiverClampTest` finds 2,085, 2,143 and 1,956 channel cells below the cell they drain
+  into over the twelve rounds on seeds 718106, 42 and 7 at 256 rows, against none before. Both began at
+  TH1-2b's commit 88f81118, which holds the relief finer than a cell above its channel, and TH1-2c's
+  square-root law grew them. The next chunk changes every world and is re-recorded anyway, so it should
+  fix the ordering first: the cell's graded level and the channel's must be read from the same surface.
+  2026-10-26, TH1-2c.
+- **The cover clause's realised share sits 8% past its tolerance at a meter's rate (TH1-2c, recorded;
+  float noise, not a bias).** `ClimateFedErosionTest`, "cover on the ground holds the incision back":
+  on seed 7 one cell at a law's rate of 1.07 m (the floor is 1 m) reads the realised share 1.08e-3 off
+  `e(1+F)/(1+eF)` against a tolerance of 1e-3, and the clause passed at 51e6b105. Read first: over seed
+  7's 7,023 cells under F 0.1 the signed departures average under 3e-5 in every band of the rate (2.7e-5
+  under 2 m, -2e-6 to 5 m, 1e-7 beyond), and the worst in a band falls as the rate rises, 1.1e-3 under 2 m,
+  4.7e-4 to 5 m, 1.9e-4 to 20 m, 5.6e-5 beyond: a millimeter of float height field over the cell's cut,
+  which is what the tolerance's own comment names. The tolerance is not widened. What would settle it is
+  a floor on the rate that leaves the quotient its three decimals (a few meters, not one), or the
+  shares read in a wider type; whoever re-records the tier decides which. 2026-10-26, TH1-2c.
+- **TH1-2c grew the Earth-likeness suite's failure set (recorded under `LAW_SETS_EVERY_CUT`; the
+  humid-channel regression is TH1-1c's to check).** On the final worlds seed 42's humid country
+  carries 1.52 times the channel per unit of land that its semi-arid country does (Moglen, Eltahir and
+  Bras have it below one; the pooled four read 1.10), seed 99's drainage density peaks in HUMID and
+  not in a dryland, and the pooled coast reads a box-counting dimension of 0.798 (it was 0.787 when
+  recorded; Earth's 1.25). The humid country's channel is the one to check first, together with the
+  ordering finding above: whether the relief held above a channel since TH1-2b is what lifts the
+  humid country's density is not yet measured. 2026-10-26, TH1-2c.
+- **A lake fan is laid as a strand one cell thick, doubling back at its end (TH1-2c, recorded under
+  the geometry guard as `LAKE_FAN_STRANDS`; the next erosion chunk).** `GeometryGuardTest`, seed 99 at
+  512 rows, "lake fans" under the creases detector: 7.04 against a bar of 6.15, a 173 degree turn at
+  (884, 446). A dump of the deposition mechanism round it shows seven cells of fan in row 446
+  (columns 884 to 890) with none in the rows above or below, and a second strand of ten cells in row 447
+  (891 to 900) stepping one row down from its east end: two runs along a row meeting at a one-row step,
+  which is what the detector reads as a crease. Why the fan lies in strands is not traced. Rule 13.
+  2026-10-26, TH1-2c.
+- **The sheet mask's edge runs along a row again (TH1-2c, recorded under the geometry guard's
+  `ICE_EDGE_ALONG_A_ROW` name; TH1-1c or the next ice chunk).** `IceSheetTest`, "the sheet mask's
+  edge follows the ground": the largest sheet's longest straight run lies along bearing 0, 38 cells on
+  seed 718106 against 36.2 allowed and 45 on seed 7 against 42.4. It is the crease the geometry census
+  records on the sheet's ground (seed 7: 44 cells at (917, 9) near the north pole), read by the mask's
+  own instrument; the two were not matched cell for cell. Rule 13. 2026-10-26, TH1-2c.
+- **The history's continents run straighter than Earth's at a tenth of the map (TH1-1, recorded;
+  TH1-1b, measured again).** D3's straight-run instrument (windows a tenth of the map wide whose
+  halves turn under 10 degrees, `CrustMeasures.straightShare`) reads the crust's edge at 0.30 pooled
+  over the standard worlds at 512 rows (0.31 the ensemble's median), against TH1-1's 0.35, main's 0.34
+  and Earth's 0.15 (ETOPO5's 2,000 m isobath at 512 rows, the same instrument); corners 0.37 to 0.40
+  (Earth 0.29) and divider dimension 1.14 to 1.16 (Earth 1.17). TH1-1b assembles the supercontinent
+  from continent-sized blocks docked one at a time (`TectonicHistory.supercontinentCells`), which took
+  the site world's 718106 from one cap whose east and west coasts were meridians to a lobed assembly
+  whose east coast is a gentle arc. What is left straight is split about evenly between the rifted
+  margins (0.27 to 0.37 of their windows) and the blocks' outer arcs (0.22 to 0.36). Tried and not
+  kept: craton-sized blocks (35 on Earth), which read 0.19 to 0.22 but string every continent into
+  round beads and scatter the land into many small continents; a wander at the supercontinent's own
+  scale over the blocks (0.31); and rifts drawn along the sutures' own line rather than the belt's
+  width (0.32). What would settle it is a rift that follows its belt's curve and steps by transforms
+  at every scale, as Earth's margins do (TH1-2's rifts, TH1-3's margins). 2026-10-21, TH1-1b.
+  **TH1-2, measured again and not fixed.** The same instrument over seeds 7, 42, 1234, 99 and 718106
+  reads 0.341 on the standard four against TH1-1b's 0.307, each seed straighter or level: the upper
+  plates' shortening takes a margin's crust back from its trench evenly along the trench, so an
+  active margin's edge follows the boundary's line. Tried and not kept: the ocean floor's ridge and
+  transform anisotropy on the continent's steps of a split's path too (`TectonicHistory.stepAnisotropy`),
+  which read 0.297 pooled over the five but split 14 plates where the history split 24 (seed 99 two
+  against eight), since a cut's transform steps open nothing and the split is taken only where the
+  cut opens; carrying it means weighing a cut's opening along its ridge steps alone, a change to the
+  cycle TH1-1b holds. 2026-10-24, TH1-2.
+  **TH1-2b, moved and not settled.** What makes the narrow ribbon continents: a later cut drawn
+  along a young rifted margin, whose stretched crust the cut's cost read as weak as an old suture's
+  (half ordinary ground, a craton four times it), so the cut ran a margin's width inland of the
+  first and sliced a strip off (seed 7's two strips in the north-west). Now a stretched margin is
+  weak only while hot, its strength back at the plate's thermal time constant; a cut takes the
+  ridge-and-transform steps through continents as through floor; and its opening is weighed on its
+  ridge steps alone, the transform steps (within Bird's 20 degrees of the motion) opening nothing.
+  With the advancing plates' coupling read from Heuret and Lallemand's table (the entry below), the
+  standard worlds read 0.310 (seeds 7, 42, 1234, 99: 0.271, 0.297, 0.302, 0.371; TH1-2 0.341, Earth
+  0.146), fifteen seeds 0.30 to 0.32 across the runs, the site world 0.25 against 0.36; corners and
+  dimension as before, splits 3.3 a world against 3.8. Ribbons are fewer but some remain (seed 42's
+  south). Measured: the upper plates' shortening alone carries 0.015 of the share over fifteen seeds
+  (0.050 on the standard four), since a margin trimmed evenly along its trench follows the
+  boundary's line. 2026-10-25, TH1-2b.
+  **TH1-2c, moved and not settled.** Two findings. The spiral lattice drawn round the planet's own
+  axis carried its neighbors' bearings into the edge along the map's rows: over forty seeds the edge
+  read 0.318 of straight runs on lattices whose axis was the planet's (as drawn, and turned about
+  the polar axis) and 0.300 on three tilted ones (2.4 to 2.8 standard errors apart); each world's
+  lattice now lies at a turn its seed draws (`TectonicHistory.latticeTurnOf`), and fifteen seeds read
+  0.287 where they read 0.324, the standard four 0.285 (Earth 0.146). And what still makes the
+  ribbons: a split's cheapest path runs through the weakest ground, and every deformed belt is half
+  ordinary ground where a craton is four times it, so a continent parts along its belts, and the belts
+  behind an active margin run parallel to the trench (of the ten continental splits in the
+  histories of seeds 7, 1066, 42, 1234, 99 and 718106, three ran 400 to 1,000 km behind their
+  plate's trenches along its Andean belts and sliced off strips of 400 to 1,900 lattice points, four
+  followed old sutures and three both; seed 7's long strip in TH1-2b's world was cut at 65 Ma along
+  a suture parallel to its margin and cut again at 50 and 10 Ma). Tried and not kept: the belts weak only
+  while their back-arc or orogen is hot (Hyndman et al. 2005's strength against temperature,
+  hardening at the back-arc's 251 Myr), which moved the cuts off the old sutures onto the live arcs
+  and sliced more strips (seed 99's at 25 Ma along 333 points of Andean belt 370 to 710 km behind
+  its trench), 0.308 against 0.324 over fifteen seeds with seeds moving both ways. What would settle
+  it is a split that opens only where the plate is pulled apart across it, a back-arc only where its
+  upper plate retreats (Heuret and Lallemand 2005). 2026-10-25, TH1-2c.
+- **The ranges stood a third of their crust's height after the rounds; held at TH1-2b, with what
+  is left (TH1-2, recorded; TH1-2b, found and fixed in part).** TH1-2 read 79.5 km of range above
+  1,500 m per million km² of land against Earth's 197. Two causes. Earth's figure counted the ice
+  domes of Greenland and Antarctica, 12,093 of its 29,391 km of axis; read without them Earth's rock
+  ranges run 116.2 (`MountainRangesTest`). And the rounds graded each cell as a reach of channel, so
+  a belt sank to the share of its steady fluvial relief the grid resolves, by Flint's and Hack's
+  laws a third at 512 rows and a half at 1,024 (measured on seed 42: the belts kept 0.34 and 0.50 of
+  their plate-stage height above a fixed datum, 1.45 times apart against the laws' 1.44): the relief
+  of the reaches finer than a cell, which the history's crust stands on, was worn away again. The
+  cell's ground now stands over its channel by that relief, at the steepness the history's own wear
+  needs (`UnresolvedRelief`). The standard worlds read 93.0 (bar 58.1, passing); the young belts
+  keep 0.74 to 0.88 of their mean height (seeds 7 and 42). What is left: the linear law makes the unresolved relief
+  linear in the erosion rate, where Earth's 39 km boxes of active ranges hold 1,250 to 1,890 m of
+  relief over rates a hundredfold apart, as Lague (2014) finds the steady state needs `n` near 2;
+  read from the thickening rate instead of the wear the relief ran to 6 km at the thickest
+  collisions, so the wear's is the one used. 2026-10-25, TH1-2b. **TH1-2c:** the steepness now follows
+  Lague's compilation, `n` near 2 (`UnresolvedRelief`): on the standard worlds' high young belts the
+  cell's mean over its channel reads 125 to 655 m on collision belts and 49 to 330 m on Andean ones at
+  512 rows (tenth to ninetieth percentile; the linear law 40 to 1,109 and 6 to 281), against
+  Earth's 39 km boxes of ranges whose ground stands above a kilometer, 343 to 1,098 m at the median
+  range by range (GMRT). The square-root law narrows the spread toward Earth's; both stand short of
+  Earth on the Andean belts, the reach above a channel head (the hillslopes) being outside it.
+- **Young ranges stand behind fewer advancing margins than Earth's (TH1-2b, recorded).** Of the
+  present trench points where a continent's plate advances on its trench, 0.333 on the standard
+  worlds have a young range within 750 km (`MountainRangesTest`; seeds 7, 42, 1234, 99: 0.48,
+  0.31, 0.29, 0.25), against Earth's 35 of Heuret and Lallemand's 38 such segments on ETOPO5 (0.92,
+  bar 0.83). At the plate stage the same reading is about 0.77; the rounds lower the arcs and
+  thrust belts there below the threshold, those belts' excess, and so their unresolved relief, being
+  small. Earth's ranges behind its slow margins (Cascadia, Mexico) are the Cordillera's, inherited
+  and hot; the history's arcs and thrust belts are short-lived where its trenches move, and the
+  back-arc's heat stands only under its extended crust (the entry below). 2026-10-25, TH1-2b.
+  **TH1-2c, raised and still short.** With the hot back-arc behind every live trench the standard
+  worlds read 0.652 (seeds 7, 42, 1234, 99: 0.58, 0.68, 0.73, 0.59; bar 0.834). Each lever alone, on
+  TH1-2b's lattice: the heat 0.333 to 0.735, the square-root law 0.329, both 0.716. At the plate
+  stage 0.96 of the points carry a range (pooled); of the 1,828 the finished map loses 432 to the
+  erosion stage (their highest smoothed ground within reach 2,226 m at the plate stage and 1,236 m
+  after, at the median; the passing ones lose 918 m too: the arcs and thrust belts behind the trench
+  are cut by the replay and the rounds, the belts at large keeping 0.755 of their height on seed 42),
+  121 stood low already and 84 have little land in reach. The hot back-arcs alone stand 1.4 to 1.6
+  km, at the threshold. What it needs: the erosion stage's cut on the narrow belts behind a trench
+  held against the history's own wear there, as TH1-2b held the belts at large. 2026-10-25, TH1-2c.
+- **The history's back-arcs are hot over about twice Earth's share of the continents (TH1-2c,
+  measured).** Hyndman, Currie and Mazzotti (2005) find every back-arc hot across its whole width
+  and the mobile belts covering nearly a quarter of the continents; the history now marks a
+  back-arc's width behind every live trench, cratons left out, and the plate stage stands it on the
+  heat Hyndman (2015) measures, 1,600 m over a craton, cooling at 251 Myr from its trench's death.
+  The standard worlds' continental crust is 0.37 to 0.56 hot, heat-weighted: the history's
+  continents meet about twice Earth's trench (the crust-area entry), and its trenches die and move
+  often. The land reads a mean of 834 m and 0.085 above 2 km on the
+  standard worlds (Earth's ice-free land 673 m and 0.058 on ETOPO5 at 512 rows), 0.226 between 1
+  and 2 km (`HypsometryTest`: Earth 0.154 +- 0.033), and range above 1,500 m runs 228.5 km per
+  million km2 of land, twice Earth's 116.2 (`MountainRangesTest`). Not tuned, and not re-read
+  against the datum: the datum is Earth's platform, a quarter of it hot, and taking that quarter's
+  heat off every column moved the land's mean by 5 m, the percentile cut following it; what moves
+  the land is how much of the crust the history leaves hot.
+  2026-10-25, TH1-2c.
+- **The Andean ranges stand on the hot back-arc's plateau, less dissected than Earth's (TH1-2c,
+  recorded).** With the heat the Andean stratum is held for the first time, 18 ranges over 39,410 km
+  on the standard worlds, mean crest 2,816 m: crest zone low 0.083 and width CV 0.172 against the
+  least dissected of Earth's (Mexico's 0.133 and 0.185; the Andes 0.312 and 0.455), high run 727 km
+  and 2.08 massifs per 1,000 km inside Earth's (`MountainRangesTest`). The heat is a smooth field 75 km
+  wide, and the ranges stand on it as on a plateau the rounds have not cut into valleys; Earth's
+  Andes are cut by its wet north's and glaciated south's rivers. 2026-10-25, TH1-2c.
+- **Water the ocean cannot reach stands at the sea's level when it is larger than the Caspian
+  (TH1-2c, measured).** The islet field in TH1-2b's site world was not the extended province: it lay
+  on a 2.6-billion-year craton, an enclosed body of 5.3 million km2 whose floor stood 38 m under the
+  sea's level on the median and whose sill, a notch the rounds cut through an old collision belt,
+  stood 65 m over it. Larger than the Caspian, the sea-level stage keeps such water as sea (H5), and
+  the craton's own relief, as rough as Earth's drowned platforms' (20 m within five cells against
+  Hudson Bay's 18 and the Baltic's 24), came through as 75 islets, 14.2 per million km2, where Earth's
+  drowned platforms carry at most the Baltic's 8.4 (`ExtendedProvinceTest`); at its own spill level
+  the body would have held 16. TH1-2c's site world is another world (the lattice's turn) and its
+  inland bodies read 3.4 to 6.1, but it holds 16 million km2 of such enclosed seas where TH1-2b's
+  held 9, its cold cratons standing lowest under the hot back-arcs' rims; and the same pattern now
+  shows on the standard worlds at 1,024 rows, which the clause does not read: seed 7 has an enclosed
+  sea of 2.67 million km2 with 55 islets (20.6 per million km2) and seed 1066 one of 1.91 with 17
+  (8.9), where TH1-2b's seeds 7 and 42 had none over 0.2 million km2 and 1066 one at 3.2. Whether
+  water the ocean cannot reach should stand at its own level whatever its size, and what then
+  becomes of H5's reasons for the cap, is the question; the cold interiors standing under the cut
+  is the other half. 2026-10-25, TH1-2c.
+- **The site world's oldest extended crust lies under the ocean its columns stand above (TH1-2c,
+  recorded).** On the world the lattice's turn now draws for seed 718106 at the site's settings, the
+  extended province is 0.886 land against the 0.947 its columns predict on the stage's own heat
+  and the plate stage's own waterline (`ExtendedProvinceTest`, bar 0.897). The 827 drowned cells
+  are all in the ocean, not in an enclosed sea, at a margin; they were stretched about 185 Myr ago
+  behind a trench that died about 177 Myr ago (half the heat left), most with 30 to 40 km of crust.
+  The plate stage already stands them there (0.887 above the finished shoreline), so it is the
+  platform's ground and not the rounds; what lowers it under its columns is not found.
+  2026-10-25, TH1-2c.
+- **The unresolved relief and the back-arc's heat have no card path (TH1-2b).** Both are per-cell
+  passes on the processor: the relief is read once and spent inside the rounds' incision, which has
+  no card path, and the heat is a Gaussian blur in the plate stage. 2026-10-25, TH1-2b. **TH1-2c:** the
+  back-arc's age is read onto the map by the crust map's pass, card included (`GpuCrustMap`); the
+  heat's blur and the relief stay on the processor.
+- **The history's crust area balance sits near its bar (TH1-2, measured).** With the upper plates
+  shortened at their trenches the crust's area moves by -12.6% and -12.9% on seeds 7 and 1066 over
+  200 Myr (bar 13.9%; without the shortening and the widening, -3.8% and -4.2%), the margins'
+  shortening booking -5.5% and -6.2% of the start. The coupling is Heuret and Lallemand's
+  (`Vd = a Vup`, Earth's continental upper plates advancing at up to 48 mm a year in their table),
+  but by a rough count against their table the history's continents meet about twice Earth's length
+  of trench, and the books' sources hardly make area: island arcs became continent over 0.00 to
+  0.05% of the start. The slab-controlled segments' own back-arc spreading, Heuret and Lallemand's
+  other 40% of the deforming ones, is not modeled, and would make area where it opens.
+  2026-10-24, TH1-2. **TH1-2b:** with the advancing plates shortened only as often as Heuret and
+  Lallemand's Table 1 finds at their speed (none of 18 segments under 30 mm a year, 17 of 24 over
+  40) and by their measured anchorings (median 0.12), seeds 7 and 1066 move -13.1% and -13.2% (bar
+  13.9%); drawn at that share with the old anchorings they moved -17.8% and -17.3%.
+- **Glacial carving does not run in the belts' replay (TH1-2).** The ice carves the present ranges
+  after erosion, as it always has (`GlaciationStage`); the replay of the belts' window runs rivers
+  and slopes only, so the cirques and troughs of the window's glaciations are not in it. What it
+  needs: the window's climate, where the replay takes the opening climate's rain, and a sheet and
+  valley-glacier pass inside the replay's rounds. 2026-10-24, TH1-2.
+- **Hovius's outlet spacing is not yet an instrument (TH1-2).** The brief asks the transverse
+  valleys' spacing against Hovius's ratio of a range's half-width to its outlets' spacing, 1.91 to
+  2.23 over eleven orogens (Hovius 1996, as Talling et al. 1997 give it), treated statistically. At
+  1,024 rows a range's half-width of about 170 km spaces its outlets some 80 km apart, four cells; an
+  instrument needs the range front on each flank and the outlets of the basins that reach the main
+  divide crossing it. The chained lakes inside ranges the design saw are counted in the TH1-2 report,
+  not guarded. 2026-10-24, TH1-2.
+- **The belts' replay has no card path (TH1-2).** It costs 2 to 3 s a world at 512 rows and about
+  12 s at 1,024 (`BeltErosion`); its rivers' flood and order are sequential, and its slopes' sweeps
+  are the rounds' and would go to the card's sweep (`ErosionAccelerator.erode`) with a mask of the
+  belts, which the card's sweep does not take yet. 2026-10-24, TH1-2.
+- **The replay at its own step cuts a quarter less than at a finer one (TH1-2, measured).** On seed
+  42 at 256 rows its rivers cut 370, 431 and 465 million km3 at its step, its half and its quarter
+  (`BeltReplayTest`): first-order convergence, the change halving from 76 m to 42 m a cell, so the
+  converged cut is about 500 million and the shipped step's a quarter under it. A higher-order step,
+  or a finer one on the young belts only, would close it. 2026-10-24, TH1-2.
+- **The Mountain height dial is retired (TH1-2).** It set the stamped Andean belts' height
+  (`tectonics.andeanHeight`), and those belts no longer exist: the belts are the history's crust.
+  An old link's `mountains=` is set aside with the usual notice. A physical replacement, if one is
+  wanted, would be an input the physics takes (the plates' coupling, the orogens' wear time), not
+  an outcome. 2026-10-24, TH1-2.
+- **The design's Earth figures for the ranges came from a cut-down grid (TH1-2, measured; TH1-2b,
+  settled).** The whole of ETOPO5 read 0.092, 3,010 km and 1.12 because the instrument read the
+  ice domes of Greenland and Antarctica as ranges (crest zone low 0, a high run their whole length).
+  The bars are now Earth's own ranges read by the same instrument on the same grid, ice left out,
+  each stratum held to the least dissected of its kind (`MountainRangesTest.EARTH_RANGES`). The
+  old stratum is held to every high ground on Earth's old crust at 500 m, swells and traps included,
+  since a world's old stratum takes the same; held to the two old orogens alone it failed (high run
+  699 km against 626, massifs 1.79 against 3.28). 2026-10-25, TH1-2b.
+- **The crust's divider dimension moves with the lattice's turn at the bar's edge (TH1-2b,
+  recorded; TH1-2c, closed).** On the standard four, 1.170 as drawn and 1.151 turned, 0.0192 apart
+  against a bar of 0.0190 (`CrustMapGeometryTest`); over ten seeds the paired difference is 0.010 at
+  1.4 of its standard errors, the straight runs' 0.025 at 2.1. The straight-run clause TH1-2 recorded
+  is held again. 2026-10-25, TH1-2b. **TH1-2c:** real, and from the lattice's axis (the first entry);
+  with each world's lattice turned by its seed the dimension reads 0.004 apart (bar 0.012), corners
+  0.011 (0.029), straight runs 0.015 (0.045), all held. The polygon clause now reads turns on the
+  ground, the spiral lattice's corners spread over 50 to 70 degrees once it no longer lies along the
+  map's rows, and the seam clause reads the lattice as drawn, a coast crossing a turned lattice's
+  polar cap being no seam.
+- **What TH1-2 moved in the everyday tier (recorded).** On the history's new worlds, each a known
+  failure against its finding: the land holds too little above 2 km, 2.9% against Earth's 11.3%
+  (`HypsometryTest`, where TH1-1 recorded the opposite miss), and the isolated wet spots the high
+  ground raises fall to 0.18 of Earth's (`RainPlacementEarthTest`), both the scarce high ranges of
+  the entry above; the sea-level cut on seed 7 lands 1,204 m under the declared shoreline at 256 rows
+  (`UnitsTest`), that seed's crust having lost an eighth of its area (the area entry above); seed
+  1234's July boundary layer follows the drag balance at r = 0.305 against a bar of 0.50
+  (`BoundaryLayerTest`); the site world 718106 carries a sheet again, 1,642 m thick over 509 km,
+  under Greenland's divide (`IceSheetTest`); seed 42's cold coasts settle 1.5% better than its warm
+  (`OceanCurrentTest`); one realm's piece is stranded in another at 256 rows (`RealmSpreadTest`);
+  and the crust edge's straight runs read 0.341 as the lattice lies and 0.273 turned, 0.068 apart
+  against a bar of 0.067 (`CrustMapGeometryTest`, rule 13's turned lattice). Over ten seeds the
+  turned and unturned lattices read 0.316 and 0.289, the paired difference 0.027 at 1.7 of its
+  standard errors: not settled either way, and worth a look, since the upper plates' shortening
+  makes active margins follow plate boundaries, which are paths on the lattice. Armed, their worlds
+  passing: the coldest eastern-boundary water's latitude, the habitable land settled, the pooled
+  tropical desert band, seed 42's steep ground's isotropy, the one-cell river course and the
+  planet's mean temperature. In `:cartography`: the satellite world 969495 has too little ground at
+  the tree line for the alpine clause (69 cells against 500, the scarce high ranges again), and seed
+  42's coast prefers the row's bearing where its land meets the south pole (named with the
+  history's lines at the poles); the rift sills are read on seed 14, since seed 42 keeps no
+  north-south rift; armed there, the steppe's band, the sky's contrast, the slope floor and Mars's
+  water. In `:desktop`: two pixels of river ink on water with no land beside them on seed 298405
+  (`RiverWidthTest`, as TH1-1 recorded on 1234). 2026-10-24, TH1-2.
+- **What TH1-2 moved in the deep tier (recorded).** On the history's new worlds, each a known
+  failure against its finding: the lake fans put 1.26% of their perimeter in straight grid-axis
+  runs against the 1.05% bar (`DeltaOutlineTest`); one ice-made lake is a straight one-cell line on
+  seeds 718106 and 7 at 1,024 rows, a rule 13 finding not traced (`GlaciationCombTest`); 0.799 of
+  the drowned continental crust lies within 800 km of the edge against 0.80 (`GroundTextureTest`);
+  the subtropical highs stand 10.12 hPa over the mean pooled against Earth's 11.0 to 12.7
+  (`MeanCirculationEarthTest`); the deserts end along a row at 408 km pooled and the 250 mm
+  isohyet at 590 km against main's 311 and 487 (`RainGeometryTest`). `BoundaryPairTest`'s clause
+  that an Andean margin and a collision plateau are different shapes, recorded since TH1-1, now
+  reads its pooled ratio as not a number: the belts are no longer stamped on the boundaries, so
+  the profile it measures from the boundary has no Andean belt to find; it wants restating on the
+  history's belts (a thrust belt 450 to 750 km behind its trench against a plateau). The stamped
+  collisional and Andean uplift rates (`TectonicsConfig.collisionUpliftMmPerYear`,
+  `andeanUpliftMmPerYear`) no longer reach the world, those belts' rock rising at the crust's
+  thickening rate: `IncrementalReuseTest` moves the island arcs' rate instead, and
+  `IsostasyTest`'s collision-rate derivation reads a setting nothing uses; both settings want
+  retiring with that derivation. Armed, their worlds passing: the dissection pin's flat-rain
+  control, the old delta slab, the square-fan control, the comb of ice bars, the uniform-crust
+  control's drowning, the ice cap's bed and moat, seed 42's foreland moat, the subtropical ridge's
+  summer move, the cold dry interior's ice, the sheet's edge round the pole, the sheet's flow down
+  its own surface, seed 1's dry basin, and both of the Caspian clauses. Four classes ran out of
+  heap together and passed alone (`GlaciationLatticeTest`, `IceSheetTest`, `LakeWaterBalanceTest`,
+  `RealmIdRangeTest`), as at TH1-1b. In `:cartography`'s deep tier the relief's exaggeration
+  sweep finds no clear exaggeration at all on the gallery ground, its first step already pinning a
+  face of the cone (NaN, which the clause as written let pass and so read as fixed), the ground the
+  replay dissects being steeper in its tail; `EarthSizeGeometryReport` ran out of heap with the rest
+  and passed alone. In `:desktop`'s, seed 42's widest river stroke at 1,024 rows stands at 4.864 px
+  against the full pen's 4.915, and four sea cells come back above the stated sea level, as at C1b.
+  2026-10-25, TH1-2.
+- **`:ui`'s tier fails as it did on TH1-1b (measured at TH1-2).** Eleven of its 160 tests fail on
+  both trees alike: `BugReportTest` expects the ocean coverage at 62% where the default has been 71%
+  since TH1-1, and nine cases that generate worlds run out of the test task's heap in
+  `OceanStage.cancellableRound` (`CartoucheTest`, `GenerationProgressTest`, `SavesAndExportsTest`,
+  `SettingsTest`, `WorldLinkWorldTest`). Not TH1-2's; a heap for the task or smaller worlds would
+  settle the second. 2026-10-24, TH1-2.
+- **The ensemble's intermediate worlds (TH1-1 and TH1-1b, measured).** Over the predeclared seeds 1 to
+  30 at 512 rows, 9 assembled (largest landmass at least 0.75 of the land), 15 intermediate and 6
+  highly dispersed (under 0.39); over the validation seeds 1001 to 1030, 10, 10 and 10
+  (`ContinentalConfigurationEnsembleTest`); TH1-1 read 11, 11 and 8, and 9, 12 and 9. The calibration
+  hypothesis is 25%, 60% and 15%: no category absent or grossly over-represented, the calibration set
+  near it, the validation set's intermediate low (10 of 30, a count that low under 1% likely under the
+  hypothesis) and its dispersed high (10, a count that high 1.0% likely). The phase draw now follows
+  Earth's tenures, a supercontinent standing 0.31 of a 600 Myr cycle (`TectonicsConfig.assembledShareOfCycle`), so a
+  world still assembled is drawn a little more often than TH1-1's 0.23. The largest landmass's median
+  0.50 and 0.56 (Earth 0.54), Korcak's K 0.40 and 0.42 (Earth 0.51). Some assembled supercontinents
+  close round an interior sea (seeds 1, 9, 23): their blocks dock wherever they reach the assembly's
+  edge inside one hemisphere, and the ring they make encloses ocean floor. 2026-10-21, TH1-1b.
+- **The land's hemisphere over the cycle (TH1-1, measured; TH1-1b, the crowding closed).** The
+  share of all land in each world's most land-rich hemisphere (`CrustMeasures.landHemisphereShare`,
+  4,000 centers) reads a median of 0.82 over the sixty ensemble seeds at 512 rows (10th to 90th
+  percentile 0.67 to 0.93; 25 of the 60 at or under Earth's 0.811), against TH1-1's 0.974 (one world
+  of 60 at or under Earth's). By the time since the breakup began: 0.91 where it has not begun (20
+  worlds), 0.88, 0.78, 0.72 and 0.69 over 0 to 50, 50 to 100, 100 to 150 and 150 to 200 Myr (TH1-1:
+  0.98, 0.966, 0.911, 0.886), against Earth's 0.81 some 200 Myr after Pangea began to part: the
+  continents now part at Earth's speeds (the plates' slab resistance, TH1-1b), and a world as far
+  into its dispersal as Earth now holds its land a little less in one hemisphere than Earth does,
+  where TH1-1's held it far more. `ContinentalConfigurationEnsembleTest` holds the median of the
+  worlds broken 150 Myr ago or more under 0.849, midway between Earth's and TH1-1's. 2026-10-21,
+  TH1-1b.
+- **The narrow seaways inside the continents, by age (TH1-1, measured).** Water within 400 km of
+  land on both sides along a row, a column or a diagonal, equatorward of 70 degrees, in pieces at
+  least 800 km across: 7 to 30 a world over the sixty ensemble seeds (median 18.5) against Earth's
+  26 read the same way on ETOPO5 at 512 rows (its marginal and inland seas, from the Mediterranean,
+  Black, Caspian, Red and Baltic seas to Hudson Bay, the Gulfs of California and Saint Lawrence and
+  the Indonesian seas). Of the history's 1,094, 415 lie on ocean floor or rifts under 50 Myr old
+  (a median of 6 a world, 1 to 19), 318 on older, and 361 on drowned continental crust with no rift.
+  The young ones follow the cycle: 10.1 a world where the breakup began under 50 Myr ago, 8.5 at 50
+  to 100 Myr, 6.1 at 100 to 200, and 3.0 where it has not begun. 2026-10-20, TH1-1.
+- **The rifts are common on some worlds (TH1-1, measured; TH1-2, redrawn).** Seed 7 carried 456
+  whole half-grabens at 1,024 rows (`RiftIdentityTest`), the others 36 to 509. Most of them were not
+  rifts: a divergent boundary with continent on one side and ocean floor on the other, the ridge a
+  continent had already parted from held against its edge for a step or two by the lattice's slow
+  opening, was drawn as a rift valley along the coast. TH1-2 draws a rift only with continent on
+  both sides (Bird 2003 counts a boundary deeper than 2,000 m oceanic), and the ridge's own relief
+  only on the floor's side. At 512 rows the standard seeds, 718106 and 59758 now carry 0.6 to 7.9
+  thousand km of rift in all, the longest 289 to 1,412 km and 8 to 78 half-grabens, where TH1-1b
+  carried 2.4 to 29.8 thousand km, the longest 468 to 16,144 km and 26 to 264 half-grabens; Earth's
+  continental rift boundary is 27,472 km in all (Bird 2003, Table 3), its transitional steps
+  included. A rift still runs along its split's path, straight where the path is (the straight-edge
+  entry above). 2026-10-24, TH1-2.
+- **The history's lines near a pole run along the map's rows (TH1-1, recorded).** The crust's
+  edge, the plate boundaries and the coast and contours drawn on them run 36 to 307 steps along a
+  row within a few degrees of a pole on the standard worlds, and the plate boundaries' bearing
+  count reads 1.5 to 1.8 east-west over the whole map: on the ground they project 0.98 to 1.08 as
+  far east-west as north-south, on the map 1.57 to 1.68, the equirectangular grid's own stretch
+  (`GeometryFindings.HISTORY_LINES_AT_THE_POLES`). The census reads the map, and the history is
+  drawn on the sphere. Whether the census should read a line's run on the ground near the poles, or
+  the map should draw them otherwise, is a question for the drawing. 2026-10-20, TH1-1.
+- **The history's worlds move the climate's guards (TH1-1, recorded).** With continents inside
+  plates and the sea at 71% of the planet the land carries desert at x0.36 Earth's share
+  (`WaterColumnEarthTest`; it was x0.85 at W2h on main's worlds at 62% sea) and imports 50,397 km3
+  of water a year at Earth's land area, 97 past the top of Rodell's range (`RainPlacementEarthTest`);
+  one boundary-layer reading falls outside and the drag balance's correlation drops to 0.35
+  (`BoundaryLayerTest`); seed 7's coldest eastern-boundary water lies at 48 degrees
+  (`ColdWaterPlacementTest`), its sheet stands 4,803 m, 27 m past Earth's deepest sounding
+  (`IceSheetTest`), and seed 99's planet stands at 13.04 C (`SeaSurfaceEarthTest`); on the 12,000
+  km calibration planet two seeds' flanks are combed down the columns past the factor
+  (`CombGuardTest`). Each runs as a known failure under TH1-1; which part is the sea level and which
+  the history is not separated. Clauses recorded on main pass on the new worlds and are armed, some
+  of them (the lakes' pieces and basins, the peoples' unsettled land, the land's rain against its
+  potential) after failing on the history's first worlds: they sit at their margins and come and go
+  with the ground. 2026-10-21, TH1-1.
+- **What the history moved in the deep tier (TH1-1, recorded).** On the interim belts, which TH1-2
+  redraws: seeds 5, 22 and 23 draw no collision plateau broader than their margin and pooled the
+  plateau is 1.02 times as broad for its height, the one-profile control reading no margin at all
+  (`BoundaryPairTest`), seed 17's rift axis stands +0.033 above its flanks, and one seed in four
+  offers a range to `ClimateFedErosionTest`. Of the ground: seed 1234's sea mode stands at -5,325 m
+  where its floor is oldest (`IsostasyTest`, as `EarthLikenessTest`), seed 42's foreland moat lies at
+  the window's last bin with nothing beyond to rise, seed 7's ice moat is 226 m of the 1,408 its ice
+  floats out at, the ice takes cold country's lakes only from 0.45 to 1.04 per 10,000 cells
+  (`GlaciationTest`), seed 1's dry sample is 295 cells and stays at 84% of its spill
+  (`LakeWaterBalanceTest`), no seed starts with a lake over the Caspian's share
+  (`OutletIncisionTest`), the incision leaves one channel cell below its receiver on seed 42
+  (`ReceiverClampTest`) and two seeds carry a marginal snow band (`SnowBalanceTest`). Of the air:
+  seed 7's equatorial basins stand 0.19 hPa lower in the east (`AirSeaEarthTest`), the rain's largest
+  step across a row pools at 4.36 against main's 3.72 (`RainGeometryTest`), and two controls no
+  longer fail: the belts alone reverse the subtropical coasts, +0.19 against -0.20 m/s
+  (`PressureWindTest`), and hotspot cones eight times as wide raise 4.40% of a larger ocean's floor
+  (`BoundaryPairTest`). The synthetic belt of `IsostasyTest`'s steady state fails on main as here:
+  on its 200 km world no heating latitude closes the Hadley cells. In the whole deep tier at once
+  five classes ran out of their 5 GB workers and pass alone. 2026-10-21, TH1-1.
+- **The history's crust stands less of the world above the datum than the slider asks (TH1-1,
+  recorded; TH1-1b, two of three causes fixed).** Three causes were read apart on the coverage seeds
+  at 256 rows. The slider was a share of the map's cells and the history's crust a share of the
+  sphere's area, so the same crust drew 0.35 of the cells near the equator and 0.47 toward a pole:
+  fixed, the sea's share is now by area (`SeaLevelStage.shorelineForFraction`, `SeaShareTest`).
+  Stretched margins stood as if cooled for good from the moment they rifted: fixed, they carry
+  McKenzie's heat (`Isostasy.Columns.stretchedThermalBuoyancyMetres`), worth a median 140 to 310 m on
+  the standard worlds, whose margins are mostly old. What is left is the history's crust drowning
+  more of itself than Earth's: before erosion, 0.36 of it on the mean of the calibration seeds 2001
+  to 2030 (0.25 still assembled, 0.46 most rifted) against Earth's 0.29 to 0.30, its rifted margins
+  up to a fifth of its crust on a much-rifted world (Earth's slope and rise, below the shelf break,
+  0.16 of its crust on ETOPO5) standing below the shelves Earth's sediment builds, while the platform
+  still drowns its own share of the crust never stretched (0.15 to 0.22 of all the crust; Earth's
+  shelves 0.15). On the plate stage's height the cut lands 77 to 404 m under the datum on four of the
+  five seeds and 30 m over it on 718106; on the finished world, after erosion has lowered the land,
+  `IsostasyTest` reads 144 to 644 m under it (seed 7 the furthest; TH1-1: 196 to 901), a known
+  failure. Drawing the crust for the history's own 0.36 lands the uneroded cut on the datum (the
+  calibration mean 12 m under) but on 0.45 of the planet, and the extra crust, drowned, parts the
+  land: the ensemble went to 7, 24 and 29 assembled, intermediate and dispersed, the land
+  hemisphere's median to 0.76. Not done; the margins' sediment and a stretching that grows with the
+  opening (TH1-3) are what bring the drowned share back to Earth's, and the cut's place after erosion
+  is the erosion's own question. 2026-10-21, TH1-1b.
+- **The drawing's calibrated figures moved with the ground (TH1-1, recorded).** The relief's slope
+  floor reads 0.14 against `EngravingPlan.SLOPE_FLOOR`'s 0.06, its haze matches at 0.12 against 0.10,
+  the sky draws 13% flatter than the lamp and the steepest exaggeration that pins no face of the
+  gallery's cone is 48 against the declared 37.5 (`ReliefShadingTest`), the pen's ink runs 33.7 degrees
+  from the aspect and its gain puts the widest stroke at 0.99 of the land (`PenAndInkTest`), Mars's
+  water reads 4.7 against its land (`WaterColorTest`), 16 cells of seed 969495 draw less green under
+  more cover (`SatelliteStyleTest`), and on seed 1234 two pixels of river ink cross a passage at
+  least three cells wide, which the stroke count exempts and the pixel count does not
+  (`RiverWidthTest`). Each was set on main's worlds; whether to re-derive them is the drawing's
+  question once the belts (TH1-2) and margins (TH1-3) settle the ground. 2026-10-21, TH1-1.
+- **What TH1-1b moved in the deep tier (recorded).** Lost their controls: the circulation's control
+  ocean is solved by its cycles alone in 14 and no longer stalls, so the rescue is not exercised
+  (`CirculationRescueTest`); the old slab lobe lies flat on three seeds of four
+  (`DeltaMouthTest`); the seam's control draws no seam past 235 km (`LocalCirculationEarthTest`); the
+  uniform-crust control drowns 0.823 of its crust at the rim (`GroundTextureTest`); no standard world
+  has a cold dry interior to measure (`SnowBalanceTest`). Moved: seed 42's flat-rain control ranks
+  against the rain (-0.048, `ClimateFedErosionTest`); seed 42's sheet round the south pole runs 47
+  cells along a row against 45.6 allowed and flows outward at 67.9 degrees off radial against 67.5
+  (`IceSheetTest`); the bed under seed 7's cap sinks a hair past Airy's own share and its moat is 173
+  m of the 1,096 its ice floats out at (`IsostasyTest`); seed 42's southern ridge moves 10.0 degrees
+  (`MeanCirculationEarthTest`); the continents recycle 0.275 of their rain (`MoistureBudgetTest`);
+  seed 1234 starts with a lake 2.13 times the Caspian's share that keeps two thirds of its world's
+  water (`OutletIncisionTest`); its lowstand drowns no valleys, 224 mouths inside an inlet against
+  232, the three seeds pooling 1.12 times against 1.5 (`SeaLevelHistoryTest`). Armed, their worlds
+  passing: the equatorial basins' eastern pressure (`AirSeaEarthTest`), the rift's axis
+  (`BoundaryPairTest`), the ranges on offer to the climate-fed erosion (`ClimateFedErosionTest`), the
+  continents shelved rather than flooded (`GroundTextureTest`), the sea's mode on seed 1234
+  (`IsostasyTest`), seed 1's dry basin (`LakeWaterBalanceTest`), the subtropical coasts and the
+  interior's rain under the pressure term (`PressureWindTest`), the rain's step across a row
+  (`RainGeometryTest`) and the channel below its receiver (`ReceiverClampTest`). `DepositionTest`
+  read 140 cells of the logged erosion off the generated world in the whole tier at once and none
+  run alone. 2026-10-22, TH1-1b.
+- **The sea-level cut and McKenzie's heat on the processor (TH1-1b).** The sea's share is now cut by
+  area, a weighted histogram and a sort of one bin (`SeaLevelStage`), and the plate stage's column
+  carries a stretched margin's heat per cell (`Isostasy.Columns.stretchedThermalBuoyancyMetres`); both
+  are per-cell passes on the processor beside the plate stage's other raster work, and belong with it
+  on the card when TH1-4 moves the plate stage there. 2026-10-21, TH1-1b.
+- **An assembled supercontinent left standing sheds its ocean floor into many plates (TH1-1b,
+  measured).** A plate of the supercontinent that grows past Earth's largest plate, as the ocean round
+  a world still assembled is consumed under it, now splits through its ocean floor only; on seed
+  718106 at the defaults, never broken, the history ends with 26 plates, the largest 0.246 of the
+  sphere. Earth's Panthalassa carried a dozen or so. 2026-10-21, TH1-1b.
+- **On the history's dispersed worlds the land's water cycle stands off Earth's (TH1-1b, recorded).**
+  With the continents parting at Earth's speeds the standard worlds' land is smaller pieces spread
+  over both hemispheres, and the land's rain reads 981 mm a year, x1.30 Earth's
+  (`RainAgainstEarthTest`); the rain that last evaporated from land x0.69 Earth's, the rain falling
+  where the potential is under half of it x1.54, the humid continental and polar groups giving back
+  x0.79 and x0.78 of Earth's share and the polar evaporating x1.51 its millimeters
+  (`GroundReturnEarthTest`); the land's desert x0.44 Earth's share (it was x0.36 at TH1-1). Each runs
+  as a known failure under TH1-1b; which part is the new layout and which the sea's share taken by
+  area is not separated. 2026-10-21, TH1-1b.
+- **Other clauses the TH1-1b worlds moved (recorded).** Seed 42's steep ground falls 19.2 m a km down
+  a column against 15.8 along a row, 1.22 apart against `GroundIsotropyTest`'s 1.2, its land now
+  reaching the south pole under ice, the cause not traced; seed 7 leaves 11% of its habitable land
+  unsettled against a bar of 10% (`CultureRealmTest`); seed 99 carries one course of a single cell of
+  land into water (`RiverCourseTest`); seed 42's shelf, drawn off the plain jump flood, stands three
+  cells a whisker off the true distance (A-I11, `JumpFloodDistanceTest`); and seed 718106 at the
+  defaults, its supercontinent never broken and clear of both poles, carries no ice, so the
+  ice-sheet clauses read the other three of their four seeds (`IceSheetTest`). Armed, their worlds
+  passing: the boundary layer's two clauses (`BoundaryLayerTest`), the isolated wet spots
+  (`RainPlacementEarthTest`), the half-grabens' lengths (`RiftIdentityTest`) and the ice sheets'
+  thickness (`IceSheetTest`, the thickest 4,655 m). 2026-10-21, TH1-1b.
+- **What TH1-4 must put on the card (TH1-1).** The map pass is on the card behind
+  `CrustMapAccelerator` (`GpuCrustMap`, held to the processor by `CrustMapParity`: the share 2.4e-3
+  at worst against a bar of 1.1e-2, the categories differing on 1e-5 of the cells). Still on the
+  processor: the history itself, about 2.5 s of the plate stage's 3.9 at 1,024 rows warm, of which
+  the per-point passes are the carrying of every sample by its plate's rotation, the ownership
+  raster, the gap fill's floods, the boundary classification and its arcs and collisions, and the
+  lower crust's flow (ten explicit substeps over every lattice edge); and the plate stage's raster
+  floods (`boundaryDistance`, `cratonInteriorShare`), main's jump flood on the processor. 2026-10-20,
+  TH1-1.
+- ~~**The history's continents' speeds and the cratonic plates' 28 mm a year (TH1-1, measured).**~~
+  Closed by TH1-1b, 2026-10-21: the plates' balance carries the slab's resistance at the trench
+  (`TectonicsConfig.slabResistanceKm`), and the plates more than half continental move at a median of
+  29 to 31 mm a year after their breakup against Zahirovic et al.'s 28 (basal drag alone: 13 to 16),
+  the continents parting at 33 mm a year against the 20 to 33 of today's Atlantic and Indian ridges
+  (`TectonicHistoryTest`). Still off: every plate's median 58 to 62 against their 42, the plates a
+  quarter to half continental 47 against 38, and a slab-pulled plate's speed still falls with its
+  area (a slope of -0.23 in the logs against basal drag's -0.29 and Earth's 0.00); the ensemble's
+  land hemisphere at 150 to 200 Myr reads 0.68 to 0.76 against Earth's 0.81.
+- **Sea-floor age is young on some worlds (TH1-1, measured).** The floor's mean age on the map
+  reads 30 to 60 Myr on the standard seeds at 512 rows against Earth's about 60 (the history's own
+  ridges spread at a mean half rate of 23 to 52 km a Myr); its area falls with age as Earth's does.
+  Seed 99's floor, 34.5 Myr on average and 0.048 of it older than 100, stands 5 to 6 km deep over
+  0.077 of it, under `ContinentsInsidePlatesTest`'s 0.11 (recorded); seed 42's, 30.3 Myr, over
+  0.120. 2026-10-20, TH1-1.
 - **Fewer levels make the stationary waves' surface pressure stronger, not weaker (W2h, measured).**
   A1-3's "17 to 21% off at eight levels" was the relative root mean square of the difference from
   twenty-four levels, not a shortfall: on the benchmarks the eight-level surface pressure's root mean
@@ -1513,7 +2016,8 @@
   proxy's half-width (log-log slope 0.21 to 0.32 on coasts). What would settle it is a measure with
   no area floor: the spacing spectrum of valley axes along a coast (the dominant wavelength of the
   elevation profile a fixed distance inland), taken at three grids. Untested: the crust margin's
-  300 km band (`TectonicsConfig.crustMarginKm`), the erosion's own lengths (`debrisTravelKm`,
+  300 km band (then `TectonicsConfig.crustMarginKm`, since TH1-1 the history's rifted margin,
+  `riftedMarginWidthKm`), the erosion's own lengths (`debrisTravelKm`,
   `deltaReachKm`, `outletReachKm`), and the instrument's reference grid and shortest front, which
   were not varied. 2026-09-22, X1d.
 - ~~**The land's outlines are consistent with cell-space anisotropy in the kilometre metric.**~~
@@ -2314,7 +2818,10 @@
   should go or the sweeps should be given a threshold that means something at a 23 km cell, which
   is a question about what a sub-cell distribution of slopes does and belongs with lithology (H3)
   rather than with a constant. 2026-09-13, S2.
-- **The spreading rate this world needs is faster than Earth's fastest ridge.** Sea floor is
+- ~~**The spreading rate this world needs is faster than Earth's fastest ridge.**~~ Closed by TH1-1,
+  2026-10-20: the floor is the tectonic history's, made at ridges that spread at the plates' own
+  relative motion, and the standard seeds' present ridges spread at a mean half rate of 27 to 59
+  km per Myr (`TectonicHistoryTest`), Earth's ridges between. The entry as it stood: Sea floor is
   destroyed as fast as it is made, so the mean age of a planet's floor is its ocean's area over its
   ridges' production, and a world with less ridge for its ocean has to spread faster or its floor
   would be older than the planet. `PlateStage.seafloorAgeOf` therefore solves the rate from Earth's
@@ -2324,7 +2831,11 @@
   crusts that are not both oceanic, so this map carries about half Earth's ridge length for its
   ocean area. Giving the plates a spreading history — ridges that propagate, and triple junctions
   that migrate — is what would fix it, and it is a chunk rather than a knob. 2026-09-13, S2.
-- **The deep sea floor is some 600 m shallower than Earth's, and the missing 600 m is the margin.**
+- ~~**The deep sea floor is some 600 m shallower than Earth's, and the missing 600 m is the margin.**~~
+  Closed by TH1-1, 2026-10-20: `IsostasyConfig.oceanicMeanFloorMetres` is retired and the floor
+  stands at its own age's depth, the history's; floor 5 to 6 km deep is 0.13 to 0.23 of the sea on
+  the standard seeds at 512 rows against Earth's 0.21 (`ContinentsInsidePlatesTest`). The entry as
+  it stood:
   Earth's mean ocean depth of 3,682 m is a mean over the whole ocean, and about a fifth of that
   ocean is shelf, slope and rise standing on continental crust; the deep floor away from the margins
   averages nearer 4,300. `IsostasyConfig.oceanicMeanFloorMetres` anchors this generator's *oceanic
@@ -2499,7 +3010,10 @@
   rift lakes are held to `RiftDepthTest`'s and `OutletIncisionTest`'s bars and deepening a trough
   round by round is exactly what E7 measured and refused when it was done by the stamp. Whoever
   takes it should read E7 and E8's notes below first. 2026-09-13, S2.
-- **An old belt's rounding is not the same spread in kilometers at every grid.**
+- ~~**An old belt's rounding is not the same spread in kilometers at every grid.**~~ Retired by
+  TH1-1, 2026-10-20: no past belt is stamped or rounded any more; an old belt is the thickening the
+  history left in the crust, read on its lattice and drawn the same at every grid. The entry as it
+  stood:
   `PlateStage.roundWithAge` rounds a past epoch's uplift by a Gaussian of spread
   `sqrt(2 r (r + 1) / 3)` cell widths, with `r` the setting `TectonicsConfig.beltAgeBlurKm` read in
   cell widths: the spread two box passes of that radius had. The formula is not proportional to
@@ -2563,7 +3077,9 @@
   1.53 and 1.39 read as 1 + log2 of the growth, and 1.28 to 1.92 on the other seeds, where natural
   coasts run 1.2 to 1.3. No claim of resolution independence is made for lakes until L2 lands.
   2026-09-28, Q4; 2026-09-29, L1.
-- **Whether a plate is continental can change at 256 rows.** The crusts are handed out by
+- ~~**Whether a plate is continental can change at 256 rows.**~~ Retired by TH1-1, 2026-10-20: the
+  crust is the history's, made on its own lattice in kilometers, and the map only reads it, so a
+  world's continents and plates are the same at every grid. The entry as it stood: The crusts are handed out by
   accumulated cell counts against a target share and by raster adjacency between plates
   (`PlateStage.drawPlates`), and a plate near the target's edge, or two plates touching along a
   cell or two, can come out differently on a coarse grid: over seeds 1 to 60, the crusts differ

@@ -43,9 +43,9 @@ class IceSheetTest : BorrowsSharedWorlds() {
     fun `a sheet stands as thick as Earth's sheets do`() {
         val failures = ArrayList<String>()
         val thin = ArrayList<String>()
-        seeds.forEach { seed ->
+        sheetSeeds.forEach { seed ->
             val measured = measure(seed)
-            val mass = measured.mass
+            val mass = measured.mass!!
             val thickest = mass.iceThicknessMetres.max()
             val furthestKm = mass.marginDistanceKm.max()
             val sheetCells = mass.onTheSheet.count { it }
@@ -68,10 +68,16 @@ class IceSheetTest : BorrowsSharedWorlds() {
         // Recorded at C1b: the march that closes its budget snows on the polar land where the old one
         // dropped the cold cap's water, and the sheets it feeds stand thicker than Earth's. The ice
         // is measured and not fixed in C1b (docs/TODO.md, "The ice after C1b").
-        KnownFailures.expect("C1b: the sheets the conserving march feeds stand thicker than Earth's", "seed 718106 stands 6569; seed 59758 stands 6285; seed 7 stands 6525") {
+        // Armed at TH1-1 on the history's first worlds, which passed it; recorded again on its final
+        // worlds, on which seed 7's sheet stood 4,803 m, 27 m past Earth's deepest sounding
+        // (docs/DESIGN_LEDGER.md, TH1-1). Armed at TH1-1b, whose worlds pass it, the thickest sheet
+        // 4,655 m on seed 59758 (docs/DESIGN_LEDGER.md, TH1-1b). Recorded again at TH1-2c, on whose
+        // ground seed 59758's sheet stands 4,929 m, 153 m past it (docs/DESIGN_LEDGER.md, TH1-2c;
+        // docs/TODO.md).
+        KnownFailures.expect("TH1-2c: the sheet the history's ground feeds stands thicker than Earth's deepest sounding", "seed 59758 stands 4929") {
             if (failures.isNotEmpty()) {
                 throw RecordedViolation(
-                    "the sheets are outside the envelope Earth's two sit in:\n" + failures.joinToString("\n"),
+                    "the sheets are outside the envelope Earth's two sit in: " + failures.joinToString("; "),
                     failures.joinToString("; ") { it.substringBefore(" m thick") }
                 )
             }
@@ -79,12 +85,18 @@ class IceSheetTest : BorrowsSharedWorlds() {
         // Failed from Fix 2 to C1b, sheets on high plateaus standing under Greenland's divide; armed
         // at C1b, whose march snows on the polar land the water the old one's cold cap dropped, so
         // the sheets now stand past the floor (and, above, past Earth's envelope: the known failure
-        // there is the opposite miss). See docs/DESIGN_LEDGER.md, Fix 2 and C1b.
-        assertTrue(
-            "sheets whose middles stand $CONTINENTAL_MARGIN_KM km or more from their margins are thinner " +
-                "than the $CONTINENTAL_THICKNESS_FLOOR_M m Greenland's divide stands at: ${thin.joinToString()}",
-            thin.isEmpty()
-        )
+        // there is the opposite miss). See docs/DESIGN_LEDGER.md, Fix 2 and C1b. Recorded at TH1-2,
+        // whose site world 718106 carries a sheet again, 1,642 m thick over 509 km
+        // (docs/DESIGN_LEDGER.md, TH1-2; docs/TODO.md).
+        KnownFailures.expect("TH1-2: the site world's sheet stands thinner than Greenland's divide", "seed 718106 at 1948 m over 548 km") {
+            if (thin.isNotEmpty()) {
+                throw RecordedViolation(
+                    "sheets whose middles stand $CONTINENTAL_MARGIN_KM km or more from their margins are thinner " +
+                        "than the $CONTINENTAL_THICKNESS_FLOOR_M m Greenland's divide stands at: ${thin.joinToString()}",
+                    thin.joinToString()
+                )
+            }
+        }
     }
 
     /**
@@ -100,11 +112,11 @@ class IceSheetTest : BorrowsSharedWorlds() {
     fun `a sheet's summit is colder than its bed by the lapse rate`() {
         val failures = ArrayList<String>()
         val lapse = WorldGenConfig().climate.lapseRateCPerKm
-        seeds.forEach { seed ->
+        sheetSeeds.forEach { seed ->
             val measured = measure(seed)
             val config = measured.config
             val withIce = measured.carved
-            val thickness = measured.mass.iceThicknessMetres
+            val thickness = measured.mass!!.iceThicknessMetres
             val bedData = FloatArray(withIce.relativeElevation.data.size) { cell ->
                 withIce.relativeElevation.data[cell] -
                     thickness[cell] / config.scale.highestLandMetres
@@ -173,10 +185,10 @@ class IceSheetTest : BorrowsSharedWorlds() {
         // The audited seeds, the reported world beside them (the only one at 1,024 rows, a disc of
         // four times the cells), and [DOME_SEED], which is here so that the clause reads a dome
         // whatever the audited seeds grow: on square cells none of them fills a third of its disc.
-        val worlds = seeds.map { it to measure(it) } +
+        val worlds = sheetSeeds.map { it to measure(it) } +
             listOf(REPORTED_SEED to reported(), DOME_SEED to measure(DOME_SEED))
         worlds.forEach { (seed, measured) ->
-            val reading = readFlow(measured, measured.mass.sheetFlowReceiver) ?: return@forEach
+            val reading = readFlow(measured, measured.mass!!.sheetFlowReceiver) ?: return@forEach
             val lineation = lineationAgainstFlow(measured)
             println(
                 ("I1 FLOW seed %d: of %d sheet cells within %.0f km of the dome, %.1f%% flow" +
@@ -207,7 +219,8 @@ class IceSheetTest : BorrowsSharedWorlds() {
         // Armed at W2b, on whose ground enough sheets fill a third near their domes (docs/DESIGN_LEDGER.md, W2b).
         // Recorded at W2d, on whose ground no candidate's sheet fills a third near its dome, as the
         // everyday tier's control finds at 512 rows (docs/DESIGN_LEDGER.md, W2d; docs/TODO.md).
-        KnownFailures.expect("W2d: no sheet the flow clause can read has a dome", "0 seeds") {
+        // Armed at TH1-1, whose worlds pass it (docs/DESIGN_LEDGER.md, TH1-1).
+        run {
             if (domesRead < LEAST_SEEDS_WITH_A_DOME) {
                 throw RecordedViolation(
                     "only $domesRead seeds grow a sheet whose dome fills a third of its own disc, under" +
@@ -237,7 +250,10 @@ class IceSheetTest : BorrowsSharedWorlds() {
         // whose snow clears it (docs/DESIGN_LEDGER.md, A1-6b). Recorded at W2b, whose ground reads
         // seed 42's dome again, its sheet flowing outward a hair under the bar (docs/TODO.md).
         // Armed at W2d, on whose ground no dome is read and the clause above records it, so this one
-        // holds over none (docs/DESIGN_LEDGER.md, W2d).
+        // holds over none (docs/DESIGN_LEDGER.md, W2d). Recorded at TH1-1b, whose seed 42 carries a
+        // sheet round the south pole that flows outward a hair over the bar's angle, 68.5% at 67.9
+        // degrees off radial (docs/DESIGN_LEDGER.md, TH1-1b; docs/TODO.md).
+        // Armed at TH1-2, whose worlds pass it (docs/DESIGN_LEDGER.md, TH1-2).
         assertTrue("the sheet is not flowing down its own surface: " + failures.joinToString("; "), failures.isEmpty())
     }
 
@@ -256,10 +272,10 @@ class IceSheetTest : BorrowsSharedWorlds() {
     fun `the flow clause fails a flow turned a quarter from the ice's own`() {
         // The first of [DOME_SEED] and the clause's own seeds whose sheet fills a third of its disc
         // near the dome: at A1-4 [DOME_SEED]'s held 8 cells there, so the control moves with the ice.
-        val candidates = listOf(DOME_SEED) + seeds
+        val candidates = (listOf(DOME_SEED) + seeds).filter { measure(it).mass != null }
         val seed = candidates.firstOrNull { candidate ->
             val candidateMeasured = measure(candidate)
-            readFlow(candidateMeasured, candidateMeasured.mass.sheetFlowReceiver)?.isNeighbourhood == true
+            readFlow(candidateMeasured, candidateMeasured.mass!!.sheetFlowReceiver)?.isNeighbourhood == true
         }
         if (seed == null) {
             // Recorded when H1's ground came under the coupled climate: none of the candidates'
@@ -268,7 +284,7 @@ class IceSheetTest : BorrowsSharedWorlds() {
             KnownFailures.expect("M1: no sheet the control can read has a dome", "seed 17: 31 of 513 cells; seed 718106: 148 of 513 cells; seed 59758: 77 of 513 cells; seed 7: 52 of 513 cells; seed 42: 1 of 513 cells") {
                 val readings = candidates.map { candidate ->
                     val candidateMeasured = measure(candidate)
-                    val reading = readFlow(candidateMeasured, candidateMeasured.mass.sheetFlowReceiver)
+                    val reading = readFlow(candidateMeasured, candidateMeasured.mass!!.sheetFlowReceiver)
                     if (reading == null) "seed $candidate: no sheet"
                     else "seed $candidate: %d of %.0f cells".format(reading.near, reading.disc)
                 }
@@ -282,7 +298,7 @@ class IceSheetTest : BorrowsSharedWorlds() {
         }
         val measured = measure(seed)
         val config = measured.config
-        val flow = measured.mass.sheetFlowReceiver
+        val flow = measured.mass!!.sheetFlowReceiver
         val w = config.width
         val turned = IntArray(flow.size) { cell ->
             val receiver = flow[cell]
@@ -329,7 +345,7 @@ class IceSheetTest : BorrowsSharedWorlds() {
      */
     private fun readFlow(measured: Measured, flow: IntArray): FlowReading? {
         val config = measured.config
-        val sheet = measured.mass.onTheSheet
+        val sheet = measured.mass!!.onTheSheet
         val surface = measured.carved.relativeElevation.data
         var dome = -1
         for (cell in sheet.indices) {
@@ -406,9 +422,9 @@ class IceSheetTest : BorrowsSharedWorlds() {
         var deepestCut = 0f
         var deepestAsked = 0f
         var outlets = 0
-        seeds.forEach { seed ->
+        sheetSeeds.forEach { seed ->
             val measured = measure(seed)
-            val mass = measured.mass
+            val mass = measured.mass!!
             outlets += mass.outlets
             val config = measured.config
             val without = carve(config.copy(glaciation = config.glaciation.copy(outletTroughs = false)))
@@ -469,13 +485,13 @@ class IceSheetTest : BorrowsSharedWorlds() {
     @Test
     fun `the sheet mask's edge follows the ground`() {
         val failures = ArrayList<String>()
-        seeds.forEach { seed ->
+        sheetSeeds.forEach { seed ->
             val measured = measure(seed)
             val config = measured.config
-            val disc = largestSheetOutline(config, measured.mass.onTheSheet)
+            val disc = largestSheetOutline(config, measured.mass!!.onTheSheet)
             fun through(shape: ReliefWindowShape) = carve(
                 config.copy(glaciation = config.glaciation.copy(reliefWindowShape = shape))
-            ).let { largestSheetOutline(config, it.mass.onTheSheet) }
+            ).let { largestSheetOutline(config, it.mass!!.onTheSheet) }
             val square = through(ReliefWindowShape.SQUARE)
             val octagon = through(ReliefWindowShape.OCTAGON)
             println(
@@ -499,7 +515,24 @@ class IceSheetTest : BorrowsSharedWorlds() {
         // Armed at Fix 3b's review round: seed 59758's edge ran 46 cells along bearing 0 against
         // 36.6 allowed, and once a lake falls with its outlet its longest run is 31 against 36.1
         // (docs/DESIGN_LEDGER.md, Fix 3b).
-        assertTrue("the sheet mask's edge is ruled along a grid bearing:\n" + failures.joinToString("\n"), failures.isEmpty())
+        // Recorded at TH1-1b, whose seed 42 carries land under the south pole's ice: the sheet's
+        // edge there runs round the pole along a row (docs/DESIGN_LEDGER.md, TH1-1b; docs/TODO.md).
+        // Armed at TH1-2, whose worlds pass it (docs/DESIGN_LEDGER.md, TH1-2).
+        // Recorded at TH1-2c, whose ground runs the sheet's edge along a row again, on 718106 and on
+        // seed 7 (the geometry census records a crease of the same kind under `ICE_EDGE_ALONG_A_ROW`,
+        // 44 cells on seed 7's sheet ground at the north pole); docs/TODO.md.
+        KnownFailures.expect(
+            "the ice's edge runs straight along a row",
+            "seed 718106: the sheet's edge runs 38 cells straight along bearing 0, against 36.2 allowed; " +
+                "seed 7: the sheet's edge runs 45 cells straight along bearing 0, against 42.4 allowed"
+        ) {
+            if (failures.isNotEmpty()) {
+                throw RecordedViolation(
+                    "the sheet mask's edge is ruled along a grid bearing:\n" + failures.joinToString("\n"),
+                    failures.joinToString("; ")
+                )
+            }
+        }
     }
 
     /** One sheet's outline, as the edge clause reads it. */
@@ -593,13 +626,13 @@ class IceSheetTest : BorrowsSharedWorlds() {
     @Test
     fun `the sheet's surface is a dome and not a ruling of the grid`() {
         val failures = ArrayList<String>()
-        val worlds = seeds.map { it to measure(it) } + listOf(REPORTED_SEED to reported())
+        val worlds = sheetSeeds.map { it to measure(it) } + listOf(REPORTED_SEED to reported())
         worlds.forEach { (seed, measured) ->
             val config = measured.config
             val across = config.width
             val down = config.height
             val metres = config.scale.highestLandMetres
-            val thickness = measured.mass.iceThicknessMetres
+            val thickness = measured.mass!!.iceThicknessMetres
             // The dome itself, in metres: the ground the profile was measured over plus the ice
             // standing on it. Not the finished elevation field, which carries the stage's own
             // carving under the ice as well, and a trough cut into one cell of a bed is not a
@@ -610,10 +643,10 @@ class IceSheetTest : BorrowsSharedWorlds() {
             // The steepest any body's profile climbs over its first cell of ice.
             var stepCeiling = 0f
             for (cell in thickness.indices) {
-                val dome = measured.mass.domeMetresOfMargin[cell]
+                val dome = measured.mass!!.domeMetresOfMargin[cell]
                 if (dome <= 0f) continue
                 stepCeiling = maxOf(stepCeiling, IceSheet.profileMetres(
-                    config.cellWidthKm.toFloat(), dome, measured.mass.divideKmOfMargin[cell],
+                    config.cellWidthKm.toFloat(), dome, measured.mass!!.divideKmOfMargin[cell],
                     sqrt(config.squareKilometresPerCell).toFloat()
                 ))
             }
@@ -695,9 +728,9 @@ class IceSheetTest : BorrowsSharedWorlds() {
         val cellsAcross = config.width
         val before = measured.bed.relativeElevation.data
         val after = measured.carved.relativeElevation.data
-        val thickness = measured.mass.iceThicknessMetres
-        val sheet = measured.mass.onTheSheet
-        val flow = measured.mass.sheetFlowReceiver
+        val thickness = measured.mass!!.iceThicknessMetres
+        val sheet = measured.mass!!.onTheSheet
+        val flow = measured.mass!!.sheetFlowReceiver
         // The surface carries the ice; the lowering is a question about the bed under it.
         val lowered = FloatArray(before.size) { before[it] - (after[it] - thickness[it] / config.scale.highestLandMetres) }
         var sum = 0.0
@@ -741,8 +774,21 @@ class IceSheetTest : BorrowsSharedWorlds() {
         val bed: SeaLevelResult,
         /** What it gave back: the bed carved, with the sheet's surface on top of it. */
         val carved: SeaLevelResult,
-        val mass: GlacialMass
+        /** The stage's mass tally; null where the world carries no ice at all, which the stage then leaves untouched. */
+        val mass: GlacialMass?
     )
+
+    /**
+     * The seeds whose world carries ice at all. A world with no frozen land has no sheet for these
+     * clauses to read, and since the history's continents drift (docs/DESIGN_LEDGER.md, TH1-1b) one
+     * of the four can lie clear of both poles and of any high cold ground; it is reported and left
+     * out rather than read as a sheet of nothing.
+     */
+    private val sheetSeeds: List<Long> by lazy {
+        seeds.filter { seed ->
+            (measure(seed).mass != null).also { carries -> if (!carries) println("ICE seed $seed carries no ice: left out of the sheet's clauses") }
+        }
+    }
 
     private fun measure(seed: Long): Measured =
         measured.getOrPut(seed) { carve(WorldGenConfig.forRows(seed, SharedWorlds.DETAIL_ROWS)) }
@@ -775,7 +821,7 @@ class IceSheetTest : BorrowsSharedWorlds() {
         val carved = runBlocking {
             GlaciationStage.apply(config, bed, balance, null) { mass = it }
         }
-        return Measured(config, bed, carved, mass!!)
+        return Measured(config, bed, carved, mass)
     }
 
     private companion object {

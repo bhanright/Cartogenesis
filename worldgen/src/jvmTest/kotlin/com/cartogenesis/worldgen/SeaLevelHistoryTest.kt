@@ -164,6 +164,9 @@ class SeaLevelHistoryTest : BorrowsSharedWorlds() {
         // lowstand left 109 estuary mouths against 114. Armed again at A1-2, whose pressure wind on
         // the sphere moved the ground back over it (docs/DESIGN_LEDGER.md, A1-2). Armed as well at
         // H1, on whose ground every seed's lowstand drowns a valley (docs/DESIGN_LEDGER.md, H1).
+        // Recorded at TH1-1b, on whose seed 1234 the lowstand leaves 224 mouths inside an inlet
+        // against 232 at today's level (docs/DESIGN_LEDGER.md, TH1-1b; docs/TODO.md). Armed again at
+        // TH1-2c, whose worlds pass it (docs/DESIGN_LEDGER.md, TH1-2c).
         assertTrue(shortfalls.isEmpty(), shortfalls.joinToString("; "))
         // Recorded with the clause above (docs/DESIGN_LEDGER.md, K2; docs/TODO.md).
         // Armed at A1-4, whose ground and rain read it again (docs/DESIGN_LEDGER.md, A1-4); recorded
@@ -173,15 +176,14 @@ class SeaLevelHistoryTest : BorrowsSharedWorlds() {
         // again, to 1.47x (docs/TODO.md). Armed again at W2c, whose ground reads it once more
         // (docs/DESIGN_LEDGER.md, W2c). Recorded at W2e, whose rain moved the ground under it again,
         // to 1.34x (docs/TODO.md).
-        KnownFailures.expect("W2e: the lowstand drowns fewer valleys than it owes", "1.39x") {
-            if (!(pooledEstuaries.size == seeds.size && meanGain >= estuaryGain)) {
-                throw RecordedViolation(
-                    "pooled over ${pooledEstuaries.size} seeds the lowstand leaves ${meanGain}x the estuary mouths, " +
-                        "not the ${estuaryGain}x a drowned valley owes",
-                    String.format(java.util.Locale.ROOT, "%.2fx", meanGain)
-                )
-            }
-        }
+        // Armed at TH1-1, whose worlds passed it; recorded at TH1-1b, whose seed 1234's lowstand drowns
+        // no valleys and pools the three at 1.12x (docs/DESIGN_LEDGER.md, TH1-1b; docs/TODO.md).
+        // Armed again at TH1-2c, whose worlds pass it (docs/DESIGN_LEDGER.md, TH1-2c).
+        assertTrue(
+            pooledEstuaries.size == seeds.size && meanGain >= estuaryGain,
+            "pooled over ${pooledEstuaries.size} seeds the lowstand leaves ${meanGain}x the estuary mouths, " +
+                "not the ${estuaryGain}x a drowned valley owes"
+        )
 
         // The other half of ground rule 2: the world without the lowstand has to fail a bar the
         // world with it clears, or this guard is measuring nothing.

@@ -205,94 +205,108 @@ internal object FlowRouting {
             for (column in 0 until width) {
                 val cell = row * width + column
                 if (!isLand[cell]) continue
-                val here = routingSurface[cell]
-                if (!byFacet) {
-                    receiver[cell] = steepestNeighbourOf(
-                        width, height, isLand, trueGround, routingSurface, column, row, steps
-                    )
-                    continue
-                }
-
-                var steepestFacetSlope = 0.0
-                var facetCardinal = -1
-                var facetDiagonal = -1
-                var diagonalShare = 0.0
-
-                for (side in CARDINAL_COLUMN_STEP.indices) {
-                    val cardinalColumnStep = CARDINAL_COLUMN_STEP[side]
-                    val cardinalRowStep = CARDINAL_ROW_STEP[side]
-                    val cardinal =
-                        neighbourAt(width, height, column + cardinalColumnStep, row + cardinalRowStep)
-                    if (cardinal < 0) continue
-                    val cardinalDrop = here - routingSurface[cardinal]
-                    // The facet's two legs on the ground: out to the cardinal, and on from it to
-                    // the diagonal, square to the first.
-                    val toTheCardinal = steps.of(cardinalColumnStep, cardinalRowStep).toDouble()
-                    val onToTheDiagonal =
-                        (if (cardinalColumnStep == 0) steps.eastWest else steps.northSouth).toDouble()
-
-                    for (turn in -1..1 step 2) {
-                        val diagonalColumnStep =
-                            if (cardinalColumnStep == 0) turn else cardinalColumnStep
-                        val diagonalRowStep = if (cardinalRowStep == 0) turn else cardinalRowStep
-                        val diagonal = neighbourAt(
-                            width, height, column + diagonalColumnStep, row + diagonalRowStep
-                        )
-                        if (diagonal < 0) continue
-                        val diagonalFall = here - routingSurface[diagonal]
-                        val diagonalSlope = diagonalFall / steps.diagonal
-                        // Tarboton's two components: the fall to the cardinal over the first leg,
-                        // and the further fall from the cardinal on to the diagonal over the second.
-                        val outwardFall = diagonalFall - cardinalDrop
-                        val cardinalSlope = cardinalDrop / toTheCardinal
-                        val outwardSlope = outwardFall / onToTheDiagonal
-
-                        // Where along the far edge, from the cardinal to the diagonal, the descent
-                        // crosses it: the tangent of its angle off the first leg, over the tangent
-                        // of the angle the far edge subtends. On a square's legs this is the ratio
-                        // of the two falls.
-                        val shareAlongTheEdge = if (cardinalDrop > 0.0) {
-                            outwardFall * toTheCardinal * toTheCardinal /
-                                (cardinalDrop * onToTheDiagonal * onToTheDiagonal)
-                        } else {
-                            1.0
-                        }
-
-                        // Where the descent points out of the facet it is clamped to the edge it
-                        // left by: to the cardinal when the diagonal is no lower than the cardinal,
-                        // and to the diagonal when the cardinal is not downhill at all or the
-                        // descent crosses the far edge past the diagonal.
-                        val clampedToTheCardinal = cardinalDrop > 0.0 && outwardFall <= 0.0
-                        val clampedToTheDiagonal = !clampedToTheCardinal && shareAlongTheEdge >= 1.0
-                        val facetSlope = when {
-                            clampedToTheCardinal -> cardinalSlope
-                            clampedToTheDiagonal -> diagonalSlope
-                            else -> sqrt(cardinalSlope * cardinalSlope + outwardSlope * outwardSlope)
-                        }
-                        val shareTowardTheDiagonal = when {
-                            clampedToTheCardinal -> 0.0
-                            clampedToTheDiagonal -> 1.0
-                            else -> shareAlongTheEdge
-                        }
-                        if (facetSlope > steepestFacetSlope) {
-                            steepestFacetSlope = facetSlope
-                            facetCardinal = cardinal
-                            facetDiagonal = diagonal
-                            diagonalShare = shareTowardTheDiagonal
-                        }
-                    }
-                }
-
-                receiver[cell] = when {
-                    steepestFacetSlope <= 0.0 -> -1
-                    diagonalShare <= 0.0 -> facetCardinal
-                    diagonalShare >= 1.0 -> facetDiagonal
-                    subGridDraw(column, row, seed) < diagonalShare -> facetDiagonal
-                    else -> facetCardinal
+                receiver[cell] = if (!byFacet) {
+                    steepestNeighbourOf(width, height, isLand, trueGround, routingSurface, column, row, steps)
+                } else {
+                    facetReceiver(width, height, routingSurface, column, row, steps, seed)
                 }
             }
         }
         return receiver
+    }
+
+    /**
+     * The facet rule of [flowDirections] at one cell: the receiver the water takes from the cell at
+     * [column], [row] over [routingSurface], a whole grid's surface, or -1 where no facet falls.
+     * Shared with the belts' replay ([BeltErosion]), which routes the belts alone round by round.
+     */
+    internal fun facetReceiver(
+        width: Int,
+        height: Int,
+        routingSurface: DoubleArray,
+        column: Int,
+        row: Int,
+        steps: GroundSteps,
+        seed: Long
+    ): Int {
+        val here = routingSurface[row * width + column]
+        var steepestFacetSlope = 0.0
+        var facetCardinal = -1
+        var facetDiagonal = -1
+        var diagonalShare = 0.0
+
+        for (side in CARDINAL_COLUMN_STEP.indices) {
+            val cardinalColumnStep = CARDINAL_COLUMN_STEP[side]
+            val cardinalRowStep = CARDINAL_ROW_STEP[side]
+            val cardinal =
+                neighbourAt(width, height, column + cardinalColumnStep, row + cardinalRowStep)
+            if (cardinal < 0) continue
+            val cardinalDrop = here - routingSurface[cardinal]
+            // The facet's two legs on the ground: out to the cardinal, and on from it to
+            // the diagonal, square to the first.
+            val toTheCardinal = steps.of(cardinalColumnStep, cardinalRowStep).toDouble()
+            val onToTheDiagonal =
+                (if (cardinalColumnStep == 0) steps.eastWest else steps.northSouth).toDouble()
+
+            for (turn in -1..1 step 2) {
+                val diagonalColumnStep =
+                    if (cardinalColumnStep == 0) turn else cardinalColumnStep
+                val diagonalRowStep = if (cardinalRowStep == 0) turn else cardinalRowStep
+                val diagonal = neighbourAt(
+                    width, height, column + diagonalColumnStep, row + diagonalRowStep
+                )
+                if (diagonal < 0) continue
+                val diagonalFall = here - routingSurface[diagonal]
+                val diagonalSlope = diagonalFall / steps.diagonal
+                // Tarboton's two components: the fall to the cardinal over the first leg,
+                // and the further fall from the cardinal on to the diagonal over the second.
+                val outwardFall = diagonalFall - cardinalDrop
+                val cardinalSlope = cardinalDrop / toTheCardinal
+                val outwardSlope = outwardFall / onToTheDiagonal
+
+                // Where along the far edge, from the cardinal to the diagonal, the descent
+                // crosses it: the tangent of its angle off the first leg, over the tangent
+                // of the angle the far edge subtends. On a square's legs this is the ratio
+                // of the two falls.
+                val shareAlongTheEdge = if (cardinalDrop > 0.0) {
+                    outwardFall * toTheCardinal * toTheCardinal /
+                        (cardinalDrop * onToTheDiagonal * onToTheDiagonal)
+                } else {
+                    1.0
+                }
+
+                // Where the descent points out of the facet it is clamped to the edge it
+                // left by: to the cardinal when the diagonal is no lower than the cardinal,
+                // and to the diagonal when the cardinal is not downhill at all or the
+                // descent crosses the far edge past the diagonal.
+                val clampedToTheCardinal = cardinalDrop > 0.0 && outwardFall <= 0.0
+                val clampedToTheDiagonal = !clampedToTheCardinal && shareAlongTheEdge >= 1.0
+                val facetSlope = when {
+                    clampedToTheCardinal -> cardinalSlope
+                    clampedToTheDiagonal -> diagonalSlope
+                    else -> sqrt(cardinalSlope * cardinalSlope + outwardSlope * outwardSlope)
+                }
+                val shareTowardTheDiagonal = when {
+                    clampedToTheCardinal -> 0.0
+                    clampedToTheDiagonal -> 1.0
+                    else -> shareAlongTheEdge
+                }
+                if (facetSlope > steepestFacetSlope) {
+                    steepestFacetSlope = facetSlope
+                    facetCardinal = cardinal
+                    facetDiagonal = diagonal
+                    diagonalShare = shareTowardTheDiagonal
+                }
+            }
+        }
+
+        return when {
+            steepestFacetSlope <= 0.0 -> -1
+            diagonalShare <= 0.0 -> facetCardinal
+            diagonalShare >= 1.0 -> facetDiagonal
+            subGridDraw(column, row, seed) < diagonalShare -> facetDiagonal
+            else -> facetCardinal
+        }
     }
 
     /**

@@ -103,6 +103,8 @@ internal enum class LineClass(val label: String) {
  *    record.
  *  - **realm borders**, **biome edges** (on land), **peoples' borders** and **plate boundaries**:
  *    the political, biome, peoples and plates views.
+ *  - **crust edge**: where `PlateResult.continentalShare` passes a half, the continent's edge the
+ *    history draws apart from the plates' (TH1-1), which the shelf and the sea floor's step follow.
  *  - **isotherms** (annual mean, every [ISOTHERM_STEP_C]), **isohyets** (annual, on land, at
  *    [ISOHYET_LEVELS_MM]) and the **sea temperature anomaly**'s level lines: the temperature,
  *    rainfall and currents views, which draw those fields as ramps.
@@ -121,6 +123,9 @@ internal object MapLayers {
     const val ISOTHERM_STEP_C = 5f
     val ISOHYET_LEVELS_MM = floatArrayOf(250f, 500f, 1000f, 2000f)
     val ANOMALY_LEVELS_C = floatArrayOf(-4f, -2f, 2f, 4f)
+
+    /** Where the crust is continent: more than half its mixture, as the history's guards read it. */
+    const val CRUST_EDGE_SHARE = 0.5f
 
     /** The pane the drawn layers are generalised for, as `RiverSelectionTest` takes it. */
     const val PANE_PIXELS_ACROSS = 900f
@@ -181,6 +186,10 @@ internal object MapLayers {
         layers.add(partition("biome edges", IntArray(cells) { world.climate.biome[it].ordinal }, -1, land, frame, smooth = true, zonal = true))
         layers.add(partition("peoples' borders", world.cultures.cultureId, CultureResult.UNSETTLED, land, frame))
         layers.add(partition("plate boundaries", world.plates.plateId, -1, null, frame))
+        // The crust's edge, which the history draws apart from the plates' (docs/DESIGN_LEDGER.md,
+        // TH1-1): where the continental share crosses a half, the edge the Satellite style's shelf
+        // and the isostasy's step follow.
+        mask("crust edge", BooleanArray(cells) { world.plates.continentalShare.data[it] >= CRUST_EDGE_SHARE })
 
         layers.add(Layer("isotherms", levelLines(world.climate.temperature.data,
             (-6..6).map { it * ISOTHERM_STEP_C }.toFloatArray(), frame, null), smoothField = true, followsLatitude = true))

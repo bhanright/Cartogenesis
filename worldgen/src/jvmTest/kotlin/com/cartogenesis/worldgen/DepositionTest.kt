@@ -1,5 +1,6 @@
 package com.cartogenesis.worldgen
 
+import com.cartogenesis.worldgen.pipeline.ErosionTectonics
 import com.cartogenesis.worldgen.model.WorldGenConfig
 import com.cartogenesis.worldgen.model.WorldMap
 import com.cartogenesis.worldgen.pipeline.DepositionLog
@@ -47,7 +48,7 @@ class DepositionTest : BorrowsSharedWorlds() {
         val plates = PlateStage.generate(config, TerrainStage.generate(config))
 
         val rounds = ArrayList<RoundMass>()
-        erodeBlockingReportingRounds(config, plates.height, plates.upliftRateMmPerYear) { rounds.add(it) }
+        erodeBlockingReportingRounds(config, plates.height, ErosionTectonics.of(plates)) { rounds.add(it) }
         assertEquals(config.erosion.hydraulicRounds, rounds.size, "not every round reported")
 
         var worstBudget = 0.0
@@ -137,7 +138,7 @@ class DepositionTest : BorrowsSharedWorlds() {
     private fun depositedLand(config: WorldGenConfig, world: WorldMap): BooleanArray {
         val plates = PlateStage.generate(config, TerrainStage.generate(config))
         val log = DepositionLog(config.width * config.height)
-        val eroded = erodeBlockingLoggingDeposition(config, plates.height, plates.upliftRateMmPerYear, log)
+        val eroded = erodeBlockingLoggingDeposition(config, plates.height, ErosionTectonics.of(plates), log)
         val differing = eroded.height.data.indices.count { eroded.height.data[it] != world.erosion.height.data[it] }
         assertEquals(0, differing, "the logged erosion differs from the generated world on $differing cells")
         return BooleanArray(log.mechanism.size) {

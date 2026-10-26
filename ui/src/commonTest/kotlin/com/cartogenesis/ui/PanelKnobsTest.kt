@@ -238,10 +238,6 @@ class PanelKnobsTest {
             Knobs.plates.set(base, 9)
         )
         assertEquals(
-            base.copy(tectonics = base.tectonics.copy(andeanHeight = 0.7f)),
-            Knobs.mountainHeight.set(base, 0.7f)
-        )
-        assertEquals(
             base.copy(erosion = base.erosion.copy(bedrockErodibilityPerYear = 1.5e-6f)),
             Knobs.erosionStrength.set(base, 1.5e-6f)
         )
@@ -318,7 +314,6 @@ class PanelKnobsTest {
     @Test
     fun `the new knobs read the generator's own defaults`() {
         val stock = WorldGenConfig()
-        assertEquals(stock.tectonics.andeanHeight, Knobs.mountainHeight.read(stock))
         assertEquals(stock.erosion.bedrockErodibilityPerYear, Knobs.erosionStrength.read(stock))
         assertEquals(stock.climate.seasonalTiltDegrees, Knobs.seasonalTiltDegrees.read(stock))
         assertEquals(stock.climate.rainShadowScale, Knobs.rainShadow.read(stock))
@@ -712,7 +707,7 @@ class PanelKnobsTest {
     }
 
     /**
-     * The three dials printed as a percentage are printed against the generator's own defaults.
+     * The two dials printed as a percentage are printed against the generator's own defaults.
      *
      * Those defaults are copied into `PanelKnobs.kt` so that a `show` lambda need not build a
      * config on every recomposition, and a copy is a thing that goes stale. 100% has to mean "the
@@ -722,7 +717,6 @@ class PanelKnobsTest {
     @Test
     fun `a dial shown as a percentage reads 100 at the generator's own default`() {
         val defaults = WorldGenConfig()
-        assertEquals("100%", Knobs.mountainHeight.show(defaults.tectonics.andeanHeight))
         assertEquals(
             "100%",
             Knobs.erosionStrength.show(defaults.erosion.bedrockErodibilityPerYear)

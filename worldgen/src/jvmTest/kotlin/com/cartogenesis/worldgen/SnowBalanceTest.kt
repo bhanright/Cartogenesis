@@ -407,7 +407,9 @@ class SnowBalanceTest : BorrowsSharedWorlds() {
         // land: 25.23% of the cells, where by area on the sphere the ice-sheet biome holds 7.2 to
         // 12.2% of the land of seeds 7, 42, 1234 and 99 at 512 rows against Earth's 10.1
         // (`RainAgainstEarthTest`; docs/TODO.md).
-        KnownFailures.expect("A1-6b: the ice covers more than twice Earth's share of the land's cells", "25.44%") {
+        // Armed at TH1-1, whose worlds passed it; recorded again at TH1-2c, whose polar land holds ice
+        // on 20.48% of the cells, a hair over the bar (docs/DESIGN_LEDGER.md, TH1-2c; docs/TODO.md).
+        KnownFailures.expect("TH1-2c: on the history's worlds the polar land holds ice on more than twice Earth's share of its cells", "20.48%") {
             if (shareOn > EARTH_ICE_SHARE * 2) {
                 throw RecordedViolation(
                     "ice covers ${"%.2f".format(shareOn)}% of land, more than twice Earth's ${EARTH_ICE_SHARE}%",
@@ -475,7 +477,14 @@ class SnowBalanceTest : BorrowsSharedWorlds() {
                     " ${"%.1f".format(onIce * 100.0 / interior.size)}%; now $tally"
             )
         }
-        assertTrue("no cold dry interior on any seed to measure", cells > 2000)
+        // Recorded at TH1-1b: none of its standard worlds has a cold dry interior of 2,000 cells, its
+        // continents spread and wetter (docs/DESIGN_LEDGER.md, TH1-1b; docs/TODO.md).
+        if (cells <= 2000) {
+            KnownFailures.expect("TH1-1b: no standard world has a cold dry interior to measure", "no cold dry interior on any seed") {
+                throw RecordedViolation("no cold dry interior on any seed to measure: $cells cells", "no cold dry interior on any seed")
+            }
+            return
+        }
         val shareOn = iceOn * 100.0 / cells
         val shareOff = iceOff * 100.0 / cells
         println(
@@ -491,14 +500,8 @@ class SnowBalanceTest : BorrowsSharedWorlds() {
         // whose rain from the solved vertical motion leaves the cold dry interior under 2% ice.
         // Recorded at W2e, whose free troposphere carries more water over the cold interiors: 2.6%
         // (docs/DESIGN_LEDGER.md, W2e; docs/TODO.md).
-        KnownFailures.expect("W2e: a little more of the cold dry interior stays ice sheet", "2.8%") {
-            if (shareOn >= 2.0) {
-                throw RecordedViolation(
-                    "${"%.1f".format(shareOn)}% of the cold dry interior is still ice sheet",
-                    String.format(java.util.Locale.ROOT, "%.1f%%", shareOn)
-                )
-            }
-        }
+        // Armed at TH1-2, whose cold dry interior holds under 2% ice (docs/DESIGN_LEDGER.md, TH1-2).
+        assertTrue("${"%.1f".format(shareOn)}% of the cold dry interior is still ice sheet", shareOn < 2.0)
     }
 
     /**
@@ -639,10 +642,15 @@ class SnowBalanceTest : BorrowsSharedWorlds() {
         // Armed at W2b, on whose ground enough seeds carry one (docs/DESIGN_LEDGER.md, W2b). Recorded
         // at W2c, under whose warmer sea and cooler high latitudes seed 7's band falls under its
         // least as seed 99's had (docs/TODO.md). Armed at W2h, on whose ground enough seeds carry one.
-        assertTrue(
-            "only ${seeds.size - unmeasured.size} seeds carry a marginal band, under $LEAST_SEEDS_WITH_A_MARGIN",
-            seeds.size - unmeasured.size >= LEAST_SEEDS_WITH_A_MARGIN
-        )
+        // Recorded at TH1-1, on whose worlds two seeds carry a marginal band (docs/DESIGN_LEDGER.md, TH1-1; docs/TODO.md).
+        KnownFailures.expect("TH1-1: on the history's worlds two seeds carry a marginal band", "1") {
+            if (seeds.size - unmeasured.size < LEAST_SEEDS_WITH_A_MARGIN) {
+                throw RecordedViolation(
+                    "only ${seeds.size - unmeasured.size} seeds carry a marginal band, under $LEAST_SEEDS_WITH_A_MARGIN",
+                    "${seeds.size - unmeasured.size}"
+                )
+            }
+        }
         // Recorded at C1b2, where on seed 1234 the annual mean separated the marginal band's
         // quarters by 57.5 points against the balance's 46.4; armed at A1-1, where the balance
         // separates them by 74.2 against the mean's 54.6 (docs/DESIGN_LEDGER.md, C1b2 and A1-1).

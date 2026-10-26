@@ -21,6 +21,7 @@ import kotlin.math.atan2
 import kotlin.math.sqrt
 import kotlin.test.Test
 import kotlin.test.assertContentEquals
+import kotlin.test.assertEquals
 import kotlin.test.assertTrue
 
 /**
@@ -100,6 +101,14 @@ class SatelliteStyleTest {
 
         /** Where a streak's level lines are traced: a streak this far from none, either way. */
         const val STREAK_LEVEL = 0.5f
+
+        /**
+         * A craton's crust age and a young crust's, in Myr: the history's youngest craton is 1,500 Myr
+         * old, and 180 is the 0.2 of the epochs' scale this test read before, restated
+         * (docs/DESIGN_LEDGER.md, TH1-1).
+         */
+        const val CRATON_AGE_MYR = 1_500f
+        const val YOUNG_CRUST_AGE_MYR = 180f
     }
 
     private val world: WorldMap by lazy { SharedWorlds.world(WORLD) }
@@ -115,13 +124,14 @@ class SatelliteStyleTest {
 
     @Test
     fun `a desert on old crust is redder than the same desert on young crust`() {
-        fun withCrustAge(age: Float): WorldMap {
+        fun withCrustAge(ageMyr: Float): WorldMap {
             val field = FloatField(world.width, world.height)
-            field.data.fill(age)
-            return world.copy(plates = world.plates.copy(crustAge = field))
+            field.data.fill(ageMyr)
+            return world.copy(plates = world.plates.copy(crustAgeMyr = field))
         }
-        val old = SatelliteGround.of(withCrustAge(1f))
-        val young = SatelliteGround.of(withCrustAge(0.2f))
+        // A craton's age and a young belt's, as the tectonic history writes them.
+        val old = SatelliteGround.of(withCrustAge(CRATON_AGE_MYR))
+        val young = SatelliteGround.of(withCrustAge(YOUNG_CRUST_AGE_MYR))
         val deserts = desertCells(old)
         assertTrue(deserts.size >= FEWEST_DESERT_CELLS, "only ${deserts.size} desert cells to measure")
         val oldRed = deserts.map { redness(SatelliteGround.groundColor(old, it)) }.average()
@@ -143,8 +153,8 @@ class SatelliteStyleTest {
     @Test
     fun `on a craton the red is the sand's and not every desert's`() {
         val field = FloatField(world.width, world.height)
-        field.data.fill(1f)
-        val craton = SatelliteGround.of(world.copy(plates = world.plates.copy(crustAge = field)))
+        field.data.fill(CRATON_AGE_MYR)
+        val craton = SatelliteGround.of(world.copy(plates = world.plates.copy(crustAgeMyr = field)))
         val deserts = desertCells(craton)
         assertTrue(deserts.size >= FEWEST_DESERT_CELLS, "only ${deserts.size} desert cells to measure")
         val strongRed = deserts.filter { byteOf(craton.composition[it], 0) > STRONG_RED }
@@ -203,6 +213,9 @@ class SatelliteStyleTest {
         println("SATELLITE rock summed %.0f, summers %.0f C colder %.0f; %d cells opened, green less red %.1f then %.1f"
             .format(rockBefore, ALPINE_COOLING_C, rockAfter, opened.size, greenBefore, greenAfter))
         assertTrue(rockAfter > rockBefore, "colder summers laid no more rock")
+        // Recorded at TH1-2, whose seed 969495 carried too little ground near the tree line for the
+        // clause: its belts stood lower than TH1-1b's stamped ones; armed again at TH1-2c, whose hot
+        // back-arcs lift the ground there (docs/DESIGN_LEDGER.md, TH1-2 and TH1-2c).
         assertTrue(opened.size >= FEWEST_DESERT_CELLS, "only ${opened.size} cells where the rock broke through")
         assertTrue(greenAfter < greenBefore - 10, "the opened ground is not less green")
     }
@@ -232,9 +245,10 @@ class SatelliteStyleTest {
         assertTrue(afterGreen > beforeGreen + 10, "more cover %.1f against %.1f".format(afterGreen, beforeGreen))
         // Recorded at W2b, whose drier land leaves cells of seed 969495 that more cover draws less
         // green than the truncations allow: not traced (docs/TODO.md).
-        KnownFailures.expect("W2b: a few cells draw less green under more cover", "3") {
-            if (notGreener != 0) throw RecordedViolation("$notGreener cells less green under more cover", "$notGreener")
-        }
+        // Armed at TH1-1 on the history's first worlds, which passed it; recorded again on its final
+        // worlds, on which 16 cells draw less green (docs/DESIGN_LEDGER.md, TH1-1). Armed at TH1-2c,
+        // on whose world none does (docs/DESIGN_LEDGER.md, TH1-2c).
+        assertEquals(0, notGreener, "$notGreener cells less green under more cover")
     }
 
     @Test

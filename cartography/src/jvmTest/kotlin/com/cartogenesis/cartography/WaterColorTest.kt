@@ -1,5 +1,7 @@
 package com.cartogenesis.cartography
 
+import com.cartogenesis.cartography.geometry.KnownFailures
+import com.cartogenesis.cartography.geometry.RecordedViolation
 import kotlin.test.Test
 import kotlin.test.assertTrue
 
@@ -74,6 +76,8 @@ class WaterColorTest {
                 failures += "${style.name} lake from the sea %.1f".format(lakeFromSea)
             }
         }
+        // Recorded at TH1-1, whose crust moved the ground under Mars's water; armed at TH1-2, whose
+        // ground passes it (docs/DESIGN_LEDGER.md, TH1-1 and TH1-2).
         assertTrue(failures.isEmpty(), "water that does not read: $failures")
     }
 

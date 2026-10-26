@@ -6,6 +6,7 @@ import com.cartogenesis.worldgen.pipeline.Biome
 import com.cartogenesis.worldgen.pipeline.ClimateStage
 import com.cartogenesis.worldgen.pipeline.FlowRouting
 import com.cartogenesis.worldgen.pipeline.PlateStage
+import com.cartogenesis.worldgen.pipeline.TectonicHistory
 import kotlin.math.abs
 import kotlin.math.ln
 import kotlin.math.sqrt
@@ -438,19 +439,19 @@ internal object ScaleFree {
     // statistics. The three comparisons below ask where the land is instead.
 
     /**
-     * How far the same plate's seed sits from itself between two grids, in cells of the coarser.
+     * How far the same plate's middle sits from itself between two grids, in cells of the coarser.
      *
-     * A seed is drawn as a fraction of the grid and then rounded to a cell, so two grids may
-     * disagree by that rounding and by nothing else: one cell of the coarser grid is the whole of
-     * what is allowed.
+     * The tectonic history runs on its own sphere and never reads the map's grid, so a plate's
+     * middle is the same place at any grid and is rounded to a cell of each: one cell of the
+     * coarser grid is the whole of what is allowed.
      *
-     * Taken from the draw rather than from a generated world, so the clause can reach 2048 — where
-     * a world is a minute and belongs to [ScaleFreeAuditTest]'s tier — for the price of fourteen
-     * pairs of numbers.
+     * Taken from the history rather than from a generated world, so the clause can reach 2048 —
+     * where a world is a minute and belongs to [ScaleFreeAuditTest]'s tier — for the price of two
+     * histories.
      */
     fun plateSeedDriftCoarseCells(coarse: WorldGenConfig, fine: WorldGenConfig): Double {
-        val coarsePlates = PlateStage.drawPlateSeeds(coarse).seeds
-        val finePlates = PlateStage.drawPlateSeeds(fine).seeds
+        val coarsePlates = PlateStage.presentPlates(coarse, TectonicHistory.run(coarse))
+        val finePlates = PlateStage.presentPlates(fine, TectonicHistory.run(fine))
         require(coarsePlates.size == finePlates.size) {
             "the same seed drew ${coarsePlates.size} plates at ${coarse.width} and" +
                 " ${finePlates.size} at ${fine.width}"

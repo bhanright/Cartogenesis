@@ -1,5 +1,6 @@
 package com.cartogenesis.worldgen
 
+import com.cartogenesis.worldgen.pipeline.ErosionTectonics
 import com.cartogenesis.worldgen.model.WorldGenConfig
 import com.cartogenesis.worldgen.pipeline.ClimateStage
 import com.cartogenesis.worldgen.pipeline.OceanResult
@@ -36,7 +37,7 @@ class SnowBalanceAuditTest {
             val cfg = WorldGenConfig.forRows(42L, 128).atResolution(2 * size, size)
             val terrain = TerrainStage.generate(cfg)
             val plates = PlateStage.generate(cfg, terrain)
-            val erosion = erodeBlocking(cfg, plates.height, upliftRateMmPerYear = plates.upliftRateMmPerYear)
+            val erosion = erodeBlocking(cfg, plates.height, tectonics = ErosionTectonics.of(plates))
             val sea = SeaLevelStage.apply(erosion.height, cfg)
 
             var ocean: OceanResult? = null

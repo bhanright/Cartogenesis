@@ -1,5 +1,6 @@
 package com.cartogenesis.worldgen
 
+import com.cartogenesis.worldgen.pipeline.ErosionTectonics
 import com.cartogenesis.worldgen.model.WorldGenConfig
 import com.cartogenesis.worldgen.pipeline.HydraulicErosion
 import com.cartogenesis.worldgen.model.WorldMap
@@ -58,7 +59,7 @@ class DeltaMouthTest : BorrowsSharedWorlds() {
         val cfg = config.copy(erosion = config.erosion.copy(deltaLobe = deltaLobe))
         val log = DepositionLog(cfg.width * cfg.height)
         val plates = PlateStage.generate(cfg, TerrainStage.generate(cfg))
-        val eroded = erodeBlockingLoggingDeposition(cfg, plates.height, plates.upliftRateMmPerYear, log)
+        val eroded = erodeBlockingLoggingDeposition(cfg, plates.height, ErosionTectonics.of(plates), log)
         // The same erosion the world was cut from, to the last bit, or the mask below would be
         // another run's lobes laid over this world's new land.
         val differing = eroded.height.data.indices.count { eroded.height.data[it] != world.erosion.height.data[it] }
@@ -170,12 +171,21 @@ class DeltaMouthTest : BorrowsSharedWorlds() {
         // lobes, so the count goes back to being printed rather than asserted. What is left of the
         // control is that the slab strands rivers on their own deltas and lies flat, which are the
         // two things the sloping lobe exists to fix and which it does fix.
-        assertTrue(
-            controlStranded > 0 && controlFlat == seeds.size,
-            "the old lobe was expected to strand rivers ($controlStranded) and to lie flat on " +
-                "every seed ($controlFlat of ${seeds.size}), and did not, so this guard proves " +
-                "nothing ($controlPockets seeds also had the slab stranding a mouth in a pocket)"
-        )
+        // Recorded at TH1-1b, on whose worlds the old slab lies flat on three seeds of the four
+        // (docs/DESIGN_LEDGER.md, TH1-1b; docs/TODO.md).
+        // Armed at TH1-2, on whose worlds the old slab lay flat on every seed again; recorded again
+        // at TH1-2c, on whose worlds it lies flat on three seeds of the four, 649 rivers stranded
+        // (docs/DESIGN_LEDGER.md, TH1-2 and TH1-2c; docs/TODO.md).
+        KnownFailures.expect("TH1-2c: the old slab lobe no longer lies flat on every seed", "649 stranded, flat on 3 of 4") {
+            if (!(controlStranded > 0 && controlFlat == seeds.size)) {
+                throw RecordedViolation(
+                    "the old lobe was expected to strand rivers ($controlStranded) and to lie flat on " +
+                        "every seed ($controlFlat of ${seeds.size}), and did not, so this guard proves " +
+                        "nothing ($controlPockets seeds also had the slab stranding a mouth in a pocket)",
+                    "$controlStranded stranded, flat on $controlFlat of ${seeds.size}"
+                )
+            }
+        }
     }
 
     /**

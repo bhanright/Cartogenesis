@@ -432,10 +432,12 @@ internal class DesertBands {
         // its own at H1, whose ground on the climate before C1b ran the pooled tropical band over
         // its bar with the horse latitudes' clause asserted (docs/DESIGN_LEDGER.md, H1). On H1's
         // ground under the coupled climate only the tropical band misses, so it is split from the
-        // rest again (docs/DESIGN_LEDGER.md, M1; docs/TODO.md).
+        // rest again (docs/DESIGN_LEDGER.md, M1; docs/TODO.md). Armed again at TH1-2, whose worlds
+        // passed it, and recorded again at TH1-2c, whose pooled tropical band reads x0.67 against
+        // Earth's x0.27 (docs/DESIGN_LEDGER.md, TH1-2c; docs/TODO.md).
         val tropical = reported.filter { it.contains("pooled ${names[0]} deg") }
         val complaints = reported - tropical.toSet()
-        KnownFailures.expect("M1: the pooled tropical band is over its bar on H1's ground under the coupled climate", "AUDIT BAND pooled 0-15 deg at x1.66") {
+        KnownFailures.expect("TH1-2c: the pooled tropical band is over its bar on the history's worlds", "AUDIT BAND pooled 0-15 deg at x0.67") {
             if (tropical.isNotEmpty()) {
                 throw RecordedViolation(
                     "desert sits in the wrong latitudes against Earth's Koeppen BW shares: $tropical",

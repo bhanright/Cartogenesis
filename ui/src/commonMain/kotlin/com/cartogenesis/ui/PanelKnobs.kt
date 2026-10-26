@@ -224,7 +224,6 @@ private fun relativeTo(default: Float): (Float) -> String =
  * at its config's own default, so a default that moves in the generator fails there rather than
  * quietly mislabelling the panel.
  */
-private const val DEFAULT_ANDEAN_HEIGHT = 0.52f
 private const val DEFAULT_BEDROCK_ERODIBILITY_PER_YEAR = 1e-6f
 private const val DEFAULT_RAIN_SHADOW_SCALE = 1f
 
@@ -314,25 +313,6 @@ internal object Knobs {
         write = { config, plateCount ->
             if (plateCount == config.tectonics.plateCount(config.scale)) config
             else config.copy(tectonics = config.tectonics.withPlateCount(plateCount, config.scale))
-        }
-    )
-
-    /**
-     * The crest height of a coastal range, and not [com.cartogenesis.worldgen.model.
-     * TectonicsConfig.mountainHeight], which is the obvious-looking field and the wrong one.
-     * With crust-pair profiles on, which is the default, `mountainHeight` feeds only ocean ridges
-     * and transform faults, both of them under water; the mountains anyone can see on the
-     * map are the Andean margins, which are the commonest convergent boundary a world gets, and
-     * this is their height. 0.20 gives a coast with hills on it; 0.90 gives a wall.
-     */
-    val mountainHeight = Dial(
-        section = PanelSection.TERRAIN,
-        label = "Mountain height",
-        range = 0.20f..0.90f,
-        show = relativeTo(DEFAULT_ANDEAN_HEIGHT),
-        read = { it.tectonics.andeanHeight },
-        write = { config, height ->
-            config.copy(tectonics = config.tectonics.copy(andeanHeight = height))
         }
     )
 
@@ -574,7 +554,7 @@ internal object Knobs {
     val all: List<Knob> = listOf(
         graphicsAcceleration,
         oceanCoverage,
-        plates, mountainHeight, erosionStrength,
+        plates, erosionStrength,
         seasonalTiltDegrees, rainShadow, ice,
         rivers, lakes, dryBasins,
         realms, wilderness, borders,

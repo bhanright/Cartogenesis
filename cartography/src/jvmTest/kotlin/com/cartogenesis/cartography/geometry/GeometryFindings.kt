@@ -91,6 +91,15 @@ internal object GeometryFindings {
     const val LAKE_FANS_STAMPED = "lake fans have round rims"
 
     /**
+     * A lake fan is laid as a strand one cell thick along a row, and its outline doubles back at the
+     * strand's end: 99's at (884, 446) at 512 rows, the west end of seven cells of fan in row 446
+     * with no fan above or below them, a 173 degree turn between two straight runs along the row.
+     * The census at TH1-2c's head reads 99's fans with this crease, 7.04 against a bar of 6.15
+     * (docs/TODO.md).
+     */
+    const val LAKE_FAN_STRANDS = "a lake fan is laid as a strand one cell thick, doubling back at its end"
+
+    /**
      * A lake's shore follows a circular arc to within a quarter of a cell: 969495's at (1119, 1850)
      * at 2048, 233 degrees of a circle 10.5 cells across, first seen by 4a's census.
      */
@@ -212,6 +221,24 @@ internal object GeometryFindings {
      * world, 56 to 87 cell widths.
      */
     const val PLATE_BOUNDARIES_STRAIGHT = "plate boundaries run ruler-straight"
+
+    /**
+     * Near a pole the tectonic history's lines run along the map's rows: the crust's edge, the plate
+     * boundaries, and the coast and contours the crust draws, on the standard worlds at 512 rows
+     * within a few degrees of a pole (rows 0 to 25 and 450 to 511), 36 to 307 steps along the
+     * east-west. The history is drawn on the sphere and its lines are smooth there below its
+     * lattice's 80 km and its noises' 15 km; a map row near a pole is a few hundred meters of ground,
+     * so a line that runs round the pole there crosses a hundred columns while barely changing row.
+     * On the ground it is as ragged as anywhere ([com.cartogenesis.worldgen.CrustMeasures]'s
+     * outlines are read within 60 degrees of the equator, as D3's were); on the drawn equirectangular
+     * map it is a straight run. The bearing count reads the same stretch over the whole map: on the
+     * ground the plate boundaries project 0.98 to 1.08 as far east-west as north-south on the
+     * standard worlds at 512 rows, on the map 1.57 to 1.68, and 1.21 to 1.32 within 60 degrees,
+     * since a map row is the cosine of its latitude shorter on the ground than a column. Main's
+     * partition was drawn on the cylinder and met no pole (docs/DESIGN_LEDGER.md, TH1-1;
+     * docs/TODO.md).
+     */
+    const val HISTORY_LINES_AT_THE_POLES = "near a pole the history's lines run along the map's rows"
 
     /** A plate boundary bends in a circular arc to within a quarter of a cell. */
     const val PLATE_BOUNDARY_ARC = "a plate boundary bends in a circular arc"

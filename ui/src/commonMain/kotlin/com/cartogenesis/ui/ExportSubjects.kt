@@ -5,6 +5,7 @@ import com.cartogenesis.cartography.SheetGeometry
 import com.cartogenesis.worldgen.WorldGenerationEngine
 import com.cartogenesis.worldgen.model.WorldGenConfig
 import com.cartogenesis.worldgen.model.WorldMap
+import com.cartogenesis.worldgen.pipeline.CrustMapAccelerator
 import com.cartogenesis.worldgen.pipeline.ErosionAccelerator
 import com.cartogenesis.worldgen.pipeline.IceSheetAccelerator
 import com.cartogenesis.worldgen.pipeline.MoistureAccelerator
@@ -44,7 +45,8 @@ object ExportSubjects {
         accelerator: ErosionAccelerator?,
         oceanAccelerator: OceanAccelerator?,
         iceAccelerator: IceSheetAccelerator?,
-        moistureAccelerator: MoistureAccelerator? = null
+        moistureAccelerator: MoistureAccelerator? = null,
+        crustAccelerator: CrustMapAccelerator? = null
     ): ExportSubject {
         if (isOnScreen(onScreen.config, size)) {
             return ExportSubject(onScreen, ExportedWorld.OnScreen)
@@ -54,7 +56,8 @@ object ExportSubjects {
             accelerator = accelerator,
             oceanAccelerator = oceanAccelerator,
             iceAccelerator = iceAccelerator,
-            moistureAccelerator = moistureAccelerator
+            moistureAccelerator = moistureAccelerator,
+            crustAccelerator = crustAccelerator
         )
         return ExportSubject(madeAgain, ExportedWorld.of(onScreen, madeAgain))
     }

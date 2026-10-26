@@ -26,15 +26,15 @@ import kotlin.math.sqrt
  *
  *  - **Living cover** is the vegetation density, `ClimateResult.vegetationDensity`, mixed over the
  *    bare ground as a continuous share rather than a biome's step.
- *  - **Weathering** follows the crust's age (`PlateResult.crustAge`, 1 on a craton no epoch
- *    deformed) on dry ground: young ground pale cream, middle-aged ground pinkish buff, and only
+ *  - **Weathering** follows the crust's age (`PlateResult.crustAgeMyr`, a craton's 1,500 Myr and
+ *    more where nothing deformed it since) on dry ground: young ground pale cream, middle-aged ground pinkish buff, and only
  *    the oldest sand iron red. Desert sands redden as an iron-oxide coat grows on grains a
  *    stable dune holds still, so the red is a patch where old crust and a sand sea meet rather
  *    than the color of every shield.
  *  - **Dark stone** (hamada) is dry ground that sheds its sand: a high plateau or rough hill
  *    country, short of the slopes that are all rock.
- *  - **Dark rock** is ground too steep to hold soil, the active belts (the present epoch's,
- *    crust age near 0, at altitude), dry slopes, and the alpine slopes between the tree line and
+ *  - **Dark rock** is ground too steep to hold soil, the active belts (crust deformed in the last
+ *    few tens of millions of years, at altitude), dry slopes, and the alpine slopes between the tree line and
  *    the snow, where the warmest month is too cold for the cover to close; there the rock breaks
  *    through the cover as well as coloring the ground beneath it.
  *  - **Pale sand** is loose sediment on flat, dry ground: where the erosion stage lowered the
@@ -105,9 +105,9 @@ internal object SatelliteGround {
 
         // How far the dry ground has weathered toward red, by the crust's age and softened by a
         // Gaussian so the hues fade over a few tens of kilometers rather than stopping at the line
-        // where the age jumps from one epoch's band to the next. Two stages of one process: a
-        // middle-aged surface has gone pinkish buff, and only the oldest has gone iron red.
-        val crustAge = world.plates.crustAge.copy()
+        // where one belt's age meets the next. Two stages of one process: a middle-aged surface has
+        // gone pinkish buff, and only the oldest has gone iron red.
+        val crustAge = world.plates.crustAgeMyr.copy()
         GaussianBlur.apply(
             crustAge, IRON_STAIN_SOFTENING_KM / cellWidthKm, IRON_STAIN_SOFTENING_KM / cellHeightKm
         )
@@ -143,9 +143,9 @@ internal object SatelliteGround {
             // Red is the oldest sand's: an iron coat grows on grains a stable dune holds still
             // for long enough, while the reg and hamada between the ergs go dark with varnish.
             // Bare ground on the oldest crust takes a little of it, as Australia's gibber does.
-            val oldest = smoothstep(OLDEST_UNREDDENED_CRUST_AGE, 1f, age)
+            val oldest = smoothstep(OLDEST_UNREDDENED_CRUST_AGE_MYR, FULLY_REDDENED_CRUST_AGE_MYR, age)
             val red = dry * IRON_STAIN_MOST * oldest * (RED_OFF_THE_SAND + (1f - RED_OFF_THE_SAND) * sand)
-            val blush = dry * BLUSH_MOST * smoothstep(YOUNGEST_BLUSHED_CRUST_AGE, OLDEST_UNREDDENED_CRUST_AGE, age) *
+            val blush = dry * BLUSH_MOST * smoothstep(YOUNGEST_BLUSHED_CRUST_AGE_MYR, OLDEST_UNREDDENED_CRUST_AGE_MYR, age) *
                 (BLUSH_OFF_THE_SAND + (1f - BLUSH_OFF_THE_SAND) * sand)
 
             // Stone: the dark, varnished lag of ground that sheds its sand rather than holding it:
@@ -160,7 +160,7 @@ internal object SatelliteGround {
             // alpine slopes above the tree line, where the cold leaves too short a season for
             // the cover to close over the scree.
             val steep = smoothstep(BARE_ROCK_SLOPE_START_DEGREES, BARE_ROCK_SLOPE_FULL_DEGREES, slope)
-            val activeBelt = (1f - smoothstep(0f, ACTIVE_BELT_CRUST_AGE, world.plates.crustAge.data[cell])) *
+            val activeBelt = (1f - smoothstep(0f, ACTIVE_BELT_CRUST_AGE_MYR, world.plates.crustAgeMyr.data[cell])) *
                 smoothstep(ROCKY_BELT_START_METRES, ROCKY_BELT_FULL_METRES, altitude)
             // Above the tree line the cold, not the slope, keeps the cover open, so any ground too
             // steep to hold loose sediment shows its scree; a flat alpine plain is tundra.
@@ -384,18 +384,23 @@ internal object SatelliteGround {
 
     /**
      * The crust ages over which dry ground weathers from pale cream through pinkish buff to iron
-     * red, on `PlateResult.crustAge`'s scale of 0 for the present epoch's belts to 1 for a craton.
+     * red, in millions of years.
      *
      * Desert sands redden with age: a dune field's young sand is yellow-cream, and it goes pink
      * and then red as an iron-oxide coat grows on the grains over a hundred thousand to a million
      * years of stability (Walker 1979; Gardner and Pye 1981, on the reddening of dune sands), and
      * only the shields carry red sand over whole regions. So the pink grows over the middle of
      * the history, from [YOUNGEST_BLUSHED_CRUST_AGE], and the red only past
-     * [OLDEST_UNREDDENED_CRUST_AGE]. See docs/DESIGN_LEDGER.md, S1 Satellite look, round 2, for
-     * the share of dry land each reaches.
+     * [OLDEST_UNREDDENED_CRUST_AGE_MYR], full by [FULLY_REDDENED_CRUST_AGE_MYR]. See
+     * docs/DESIGN_LEDGER.md, S1 Satellite look, round 2, for the share of dry land each reached.
+     *
+     * Set on the crust age of the epochs before the tectonic history, 0 to 1 over three epochs of
+     * 300 Myr with 1 for a craton, and restated in millions of years at the same places: 0.3 is
+     * 270, 0.75 is 675 and the craton's 1 is 900 and older (docs/DESIGN_LEDGER.md, TH1-1).
      */
-    private const val YOUNGEST_BLUSHED_CRUST_AGE = 0.3f
-    private const val OLDEST_UNREDDENED_CRUST_AGE = 0.75f
+    private const val YOUNGEST_BLUSHED_CRUST_AGE_MYR = 270f
+    private const val OLDEST_UNREDDENED_CRUST_AGE_MYR = 675f
+    private const val FULLY_REDDENED_CRUST_AGE_MYR = 900f
 
     /**
      * The share of the pink the ground between the sands takes: a third. The pink is the sand's
@@ -497,11 +502,11 @@ internal object SatelliteGround {
     private const val CONTINENTAL_HURST_EXPONENT = 0.66
 
     /**
-     * The crust age under which ground is the present epoch's own belt, rough and unweathered:
-     * the first tenth of `PlateResult.crustAge`'s scale, which is the youngest band of a history
-     * of ten epochs.
+     * The crust age under which ground is an active belt's, rough and unweathered, in millions of
+     * years: 30, the first tenth of the 300 Myr epoch the older crust age counted in, restated
+     * (docs/DESIGN_LEDGER.md, TH1-1).
      */
-    private const val ACTIVE_BELT_CRUST_AGE = 0.1f
+    private const val ACTIVE_BELT_CRUST_AGE_MYR = 30f
 
     /** The altitudes over which an active belt goes from soil to rock: its foothills to its range. */
     private const val ROCKY_BELT_START_METRES = 1_000f

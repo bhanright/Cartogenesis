@@ -493,8 +493,50 @@ object OceanCirculation {
     }
 
     /**
+     * [solve], and where its V-cycles stop short of [tolerance], [solveByKrylov] preconditioned by
+     * the same cycle from where they stopped, started afresh up to [KRYLOV_RESTARTS] times.
+     *
+     * For the circulation, whose V-cycle alone stalls where a coarse grid cannot represent the
+     * water, as the heat's does: on the tectonic history's worlds the wind guards' control oceans,
+     * under the belts' wind alone, stood at residuals of 1.12e-3 to 1.19e-3 after the whole budget
+     * of cycles against the tolerance's 1e-3, seed 1234 at 256 rows among them, and the same
+     * cycle as BiCGSTAB's preconditioner takes that world under it in one iteration
+     * (`CirculationRescueTest`; docs/DESIGN_LEDGER.md, TH1-1). A world the cycles solve
+     * is returned as they leave it, so the rescue changes no sea they could already reach.
+     */
+    internal inline fun solveWithKrylovRescue(
+        levels: List<OceanStencil>,
+        start: FloatArray,
+        tolerance: Double,
+        poleIsWall: Boolean,
+        bodies: WaterBodies?,
+        relax: (OceanStencil, FloatArray, Int) -> FloatArray
+    ): Solution {
+        val cycled = solve(levels, start, tolerance, poleIsWall, bodies, relax)
+        if (cycled.relativeResidual < tolerance || !cycled.relativeResidual.isFinite() || cycled.values.any { !it.isFinite() }) {
+            return cycled
+        }
+        var rescued = solveByKrylov(levels, cycled.values.copyOf(), tolerance, poleIsWall, bodies, relax = relax)
+        var iterations = rescued.cycles
+        var restarts = 0
+        while (rescued.relativeResidual >= tolerance && restarts < KRYLOV_RESTARTS && rescued.values.all { it.isFinite() }) {
+            rescued = solveByKrylov(levels, rescued.values.copyOf(), tolerance, poleIsWall, bodies, relax = relax)
+            iterations += rescued.cycles
+            restarts++
+        }
+        return Solution(rescued.values, cycled.cycles + iterations, rescued.relativeResidual)
+    }
+
+    /**
+     * The most times [solveWithKrylovRescue] starts BiCGSTAB again from where it stalled, with a
+     * fresh shadow residual each time: a ceiling and not a count, as the heat's
+     * (`OceanStage.HEAT_SOLVE_RESTARTS`), each start with the whole budget of iterations.
+     */
+    const val KRYLOV_RESTARTS = 3
+
+    /**
      * The same solve by BiCGSTAB (van der Vorst 1992, *SIAM J. Sci. Stat. Comput.* 13, 631-644),
-     * each iteration preconditioned by one V-cycle and [correctBodyMeans], until the residual is
+     * each iteration preconditioned by one V-cycle and, with [bodies], [correctBodyMeans], until the residual is
      * under [tolerance] of the largest right-hand side or [mostIterations] have run.
      *
      * For the heat, whose V-cycle alone stalls where a coarse grid cannot represent the water: a
@@ -508,7 +550,7 @@ object OceanCirculation {
         start: FloatArray,
         tolerance: Double,
         poleIsWall: Boolean,
-        bodies: WaterBodies,
+        bodies: WaterBodies?,
         mostIterations: Int = MOST_CYCLES,
         relax: (OceanStencil, FloatArray, Int) -> FloatArray
     ): Solution {
@@ -564,10 +606,10 @@ object OceanCirculation {
         return Solution(FloatArray(cells) { x[it].toFloat() }, iterations, residualNow)
     }
 
-    /** One V-cycle on the correction problem `L z = [balance]` from zero, then the bodies' means. */
+    /** One V-cycle on the correction problem `L z = [balance]` from zero, then the bodies' means where there are [bodies]. */
     internal inline fun precondition(
         levels: List<OceanStencil>,
-        bodies: WaterBodies,
+        bodies: WaterBodies?,
         balance: DoubleArray,
         tolerance: Double,
         poleIsWall: Boolean,
@@ -575,7 +617,7 @@ object OceanCirculation {
     ): DoubleArray {
         val corrected = listOf(withBalance(levels.first(), balance)) + levels.drop(1)
         val z = vCycle(corrected, FloatArray(balance.size), tolerance, poleIsWall, PRECONDITIONER_COARSEST_PASSES, relax)
-        correctBodyMeans(corrected.first(), z, bodies)
+        if (bodies != null) correctBodyMeans(corrected.first(), z, bodies)
         return DoubleArray(z.size) { z[it].toDouble() }
     }
 

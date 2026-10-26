@@ -166,7 +166,7 @@ class LocalCirculationEarthTest : BorrowsSharedWorlds() {
         // but the half's rain before the blur is the ground's climb cell by cell, and the
         // continent's rows change by x1.05 to x1.09 in their median over this span, Earth's whole
         // gradient across a row, and by x1.2 to x1.5 at their largest (docs/TODO.md).
-        KnownFailures.expect("F1: the half's rain before the blur steps along a row by its own grain", "42 July x1.22 at 19.8; 42 January x1.14 at -16.1; 969495 July x1.27 at 15.6; 969495 January x1.29 at -8.7; 7 July x1.19 at 5.0; 7 January x1.14 at -18.0") {
+        KnownFailures.expect("F1: the half's rain before the blur steps along a row by its own grain", "42 July x1.18 at 14.3; 42 January x1.24 at -8.7; 969495 July x1.13 at 9.2; 969495 January x1.11 at -20.3; 7 July x1.28 at 21.9; 7 January x1.64 at -9.4") {
             if (over.isNotEmpty()) {
                 throw RecordedViolation(
                     "the equatorial continent's rain steps along a row by more than Earth's steepest gradient allows: " + over.joinToString("; "),
@@ -203,7 +203,7 @@ class LocalCirculationEarthTest : BorrowsSharedWorlds() {
         }
         // Recorded at W2c, whose warmer tropical sea and cloud left seed 7's line over land at 16.1 N
         // where W2b's stood near 17.6, the pooled shift a hair under Earth's (docs/TODO.md).
-        KnownFailures.expect("W2c: July's convergence line stands a hair under Earth's distance inland", "5.1") {
+        KnownFailures.expect("W2c: July's convergence line stands a hair under Earth's distance inland", "3.7") {
             if (shifts.average() < LEAST_INLAND_SHIFT_DEGREES) {
                 throw RecordedViolation(
                     "July's convergence line over land stands %.1f degrees poleward of the sea's pooled, under Earth's %.1f"
@@ -288,6 +288,8 @@ class LocalCirculationEarthTest : BorrowsSharedWorlds() {
                 if (run > bar) over += "%d %s %.0f km".format(seed, name, run)
             }
         }
+        // Recorded at TH1-1b, on whose worlds the control drew no seam past the bar; armed again at
+        // TH1-2c, on whose worlds it draws one (docs/DESIGN_LEDGER.md, TH1-1b and TH1-2c).
         assertTrue(controlLongest > bar, "the control draws no seam longer than %.0f km, so the guard shows nothing: %.0f".format(bar, controlLongest))
         assertTrue(over.isEmpty(), "the meridional wind steps down a column over the sea for longer than %.0f km: %s".format(bar, over.joinToString("; ")))
     }

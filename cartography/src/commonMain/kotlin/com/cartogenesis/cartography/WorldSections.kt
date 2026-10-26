@@ -15,6 +15,7 @@ import com.cartogenesis.worldgen.pipeline.LandmarkResult
 import com.cartogenesis.worldgen.pipeline.NationResult
 import com.cartogenesis.worldgen.pipeline.NormalField
 import com.cartogenesis.worldgen.pipeline.OceanResult
+import com.cartogenesis.worldgen.pipeline.OrogenyKind
 import com.cartogenesis.worldgen.pipeline.PlateResult
 import com.cartogenesis.worldgen.pipeline.RiverResult
 import com.cartogenesis.worldgen.pipeline.SeaLevelResult
@@ -87,6 +88,12 @@ internal enum class ByteMeaning(val valuesBelow: Int) {
  */
 internal class IdBounds(val cells: Int, val lists: WorldLists)
 
+/**
+ * The bound a terrane id is checked against: the history numbers cratons from 0, microcontinents
+ * from 10,000 and island arcs from 20,000 plus their plate, all far inside this.
+ */
+private const val TERRANE_ID_LIMIT = 1 shl 24
+
 /** One per-cell array of a [WorldMap]: its wire name, its type, and how it is read and checked. */
 internal sealed class SectionSpec(val name: String, val type: SectionType)
 
@@ -154,9 +161,23 @@ internal object WorldSections {
         FloatSection("plates.continentalShare") { it.plates.continentalShare.data },
         FloatSection("plates.seafloorAgeMyr") { it.plates.seafloorAgeMyr.data },
         FloatSection("plates.upliftRateMmPerYear") { it.plates.upliftRateMmPerYear.data },
-        // How long ago each cell's crust was last built: the record of epochs that left no other
-        // trace, and erosion reads it.
-        FloatSection("plates.crustAge") { it.plates.crustAge.data },
+        // What the tectonic history made of each cell's crust: how long ago it was last built, how
+        // thick it is and how much of that orogeny piled on, what last deformed it, which piece of
+        // continent it began as and when it was stretched. None of it can be recovered from the
+        // height field, which isostasy made out of it.
+        FloatSection("plates.crustAgeMyr") { it.plates.crustAgeMyr.data },
+        FloatSection("plates.crustThicknessKm") { it.plates.crustThicknessKm.data },
+        FloatSection("plates.orogenicExcessKm") { it.plates.orogenicExcessKm.data },
+        IntSection("plates.orogenyKind", { 0 until OrogenyKind.entries.size }) { it.plates.orogenyKind },
+        IntSection("plates.terraneId", { -1 until TERRANE_ID_LIMIT }) { it.plates.terraneId },
+        FloatSection("plates.riftAgeMyr") { it.plates.riftAgeMyr.data },
+        // How readily the rock is cut, and the belts' recent history the erosion replays: the
+        // first is drawn from the crust's kind and age with noise along the belts, the second is
+        // the history's books, and neither is in the height field (docs/DESIGN_LEDGER.md, TH1-2).
+        FloatSection("plates.rockErodibility") { it.plates.rockErodibility.data },
+        FloatSection("plates.windowTectonicKm") { it.plates.windowTectonicKm.data },
+        FloatSection("plates.windowWearKm") { it.plates.windowWearKm.data },
+        FloatSection("plates.windowOnsetMyrAgo") { it.plates.windowOnsetMyrAgo.data },
         FloatSection("erosion.height") { it.erosion.height.data },
         ByteSection("sea.isLand", ByteMeaning.FLAG) { flagsOf(it.sea.isLand) },
         FloatSection("sea.relativeElevation") { it.sea.relativeElevation.data },
@@ -331,7 +352,17 @@ internal object WorldSections {
                 seafloorAgeMyr = field("plates.seafloorAgeMyr"),
                 seafloorHalfSpreadingRateKmPerMyr = lists.seafloorHalfSpreadingRateKmPerMyr,
                 upliftRateMmPerYear = field("plates.upliftRateMmPerYear"),
-                crustAge = field("plates.crustAge")
+                crustAgeMyr = field("plates.crustAgeMyr"),
+                crustThicknessKm = field("plates.crustThicknessKm"),
+                orogenicExcessKm = field("plates.orogenicExcessKm"),
+                orogenyKind = ints("plates.orogenyKind"),
+                terraneId = ints("plates.terraneId"),
+                riftAgeMyr = field("plates.riftAgeMyr"),
+                rockErodibility = field("plates.rockErodibility"),
+                windowTectonicKm = field("plates.windowTectonicKm"),
+                windowWearKm = field("plates.windowWearKm"),
+                windowOnsetMyrAgo = field("plates.windowOnsetMyrAgo"),
+                exposureWindowMyr = config.tectonics.exposureWindowMyr
             ),
             erosion = ErosionResult(height = field("erosion.height")),
             sea = SeaLevelResult(

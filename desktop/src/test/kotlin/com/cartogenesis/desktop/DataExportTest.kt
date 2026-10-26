@@ -91,7 +91,7 @@ class DataExportTest {
         // covers the ice standing on the ground as well as the ground: see
         // [DataExports.heightmapCeilingRulers]. The bar follows the encoding rather than being
         // restated, so it is still exactly one level and still forty times tighter than eight bits.
-        val ceilingRulers = DataExports.heightmapCeilingRulers(config)
+        val ceilingRulers = DataExports.heightmapCeilingRulers(world)
         val oneGreyLevel = ceilingRulers.toDouble() / DataExports.LEVELS_PER_SIDE
 
         var worst = 0.0
@@ -224,7 +224,8 @@ class DataExportTest {
         // A known failure from Q4 to L1 and again from L1's review round to K1, one sea cell over
         // its shoreline whose cause was never traced; armed at K2, whose worlds have none
         // (docs/DESIGN_LEDGER.md, Q4, L1 and K2). Recorded again at C1b, whose rain moved the
-        // ground: four sea cells over it, the cause still untraced (docs/TODO.md).
+        // ground: four sea cells over it, the cause still untraced (docs/TODO.md); four again on
+        // TH1-2's ground (docs/DESIGN_LEDGER.md, TH1-2).
         KnownFailures.expect("C1b: sea cells come back above the stated sea level", "6") {
             if (waterAbove != 0) {
                 throw RecordedViolation("open sea came back above sea level: $waterAbove", "$waterAbove")

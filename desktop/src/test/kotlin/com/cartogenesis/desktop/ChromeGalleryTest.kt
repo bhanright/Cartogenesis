@@ -1088,7 +1088,7 @@ class ChromeGalleryTest {
             "Seed", "Name", "Generate", "Random world", "Export",
             "Library", "World atlas",
             "World", "Ocean coverage",
-            "Terrain", "Plates", "Mountain height", "Erosion strength",
+            "Terrain", "Plates", "Erosion strength",
             "Climate", "Seasonal tilt", "Rain shadow", "Ice sheets and glaciers",
             "Water", "Rivers", "Lakes", "Dry basins hold less water",
             "Peoples", "Realms", "Leave wilderness unclaimed", "Realm borders",

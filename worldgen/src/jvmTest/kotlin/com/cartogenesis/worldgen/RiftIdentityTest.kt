@@ -211,9 +211,11 @@ class RiftIdentityTest {
     /**
      * A stretch of rift keeps its half-grabens when another stretch of the same pair comes or goes.
      *
-     * Seed 42's longest rift is cut in two places, 250 km apart and more than the trough's
-     * half-width across, so it breaks into three stretches with a short one of 80 km in the middle;
-     * then the short one is taken away too. Which stretches a pair's boundary breaks into is a
+     * Seed 42's longest stretch of rift is cut in two places, 250 km apart and more than the
+     * trough's half-width across, so it breaks into three stretches with a short one of 80 km in
+     * the middle; then the short one is taken away too. The pair may have other stretches of its
+     * own already, as the tectonic history's boundaries often do (docs/DESIGN_LEDGER.md, TH1-1), so
+     * the counts asked for are the pair's own plus two and plus one. Which stretches a pair's boundary breaks into is a
      * question of topology, a third plate pinching it here or a gap just over the joining
      * threshold there, and it moves with the grid; so nothing about a stretch's half-grabens may
      * hang on how many other stretches the pair has or where they rank. Every cell of the two outer
@@ -223,12 +225,13 @@ class RiftIdentityTest {
     fun `a stretch of rift keeps its half-grabens when another stretch of the pair comes or goes`() {
         val config = WorldGenConfig.forRows(42L, 512)
         val whole = PlateStage.presentRiftSegments(config)
-        // The pair whose rift runs furthest, which is the one there is room to cut in two places:
-        // on the Earth-sized planet's fifteen plates that is no longer the 2-7 pair the 12,000 km
-        // world's fourteen gave seed 42.
-        val pair = whole.cell.indices.groupBy { whole.lowId[it] * PAIR_STRIDE + whole.highId[it] }
+        // The stretch that runs furthest, which is the one there is room to cut in two places.
+        val longest = whole.cell.indices.groupBy { (whole.lowId[it] * PAIR_STRIDE + whole.highId[it]) to whole.chain[it] }
             .maxBy { (_, onIt) -> onIt.maxOf { whole.alongKm[it] } - onIt.minOf { whole.alongKm[it] } }.key
-        val entries = whole.cell.indices.filter { whole.lowId[it] * PAIR_STRIDE + whole.highId[it] == pair }
+        val pair = longest.first
+        val entries = whole.cell.indices.filter { whole.lowId[it] * PAIR_STRIDE + whole.highId[it] == pair && whole.chain[it] == longest.second }
+        val stretchesBefore = whole.cell.indices.filter { whole.lowId[it] * PAIR_STRIDE + whole.highId[it] == pair }
+            .map { whole.chain[it] }.toSet().size
         val start = entries.minOf { whole.alongKm[it] } + CUT_FROM_THE_END_KM
         fun cellsBetween(fromKm: Float, toKm: Float) =
             entries.filter { whole.alongKm[it] in fromKm..toKm }.map { whole.cell[it] }.toSet()
@@ -242,7 +245,8 @@ class RiftIdentityTest {
                 .associateBy { report.cell[it] }
         val a = byCell(withShort)
         val b = byCell(withoutShort)
-        val outer = entries.map { whole.cell[it] }.filter { it !in firstGap && it !in short && it !in secondGap }
+        val outer = whole.cell.indices.filter { whole.lowId[it] * PAIR_STRIDE + whole.highId[it] == pair }
+            .map { whole.cell[it] }.filter { it !in firstGap && it !in short && it !in secondGap }
         val moved = outer.filter { cell ->
             val x = a.getValue(cell)
             val y = b.getValue(cell)
@@ -255,10 +259,10 @@ class RiftIdentityTest {
             report.cell.indices.filter { report.lowId[it] * PAIR_STRIDE + report.highId[it] == pair }.map { report.chain[it] }.toSet().size
         }
         println(
-            "RIFT STRETCHES seed 42 rift 2-7: %d and %d stretches with the short one and without; %d of %d outer cells read another half-graben"
-                .format(stretches[0], stretches[1], moved.size, outer.size)
+            "RIFT STRETCHES seed 42: %d stretches before, %d and %d with the short one and without; %d of %d outer cells read another half-graben"
+                .format(stretchesBefore, stretches[0], stretches[1], moved.size, outer.size)
         )
-        assertEquals(listOf(3, 2), stretches, "the cuts did not make the stretches this case is about")
+        assertEquals(listOf(stretchesBefore + 2, stretchesBefore + 1), stretches, "the cuts did not make the stretches this case is about")
         assertTrue(moved.isEmpty(), "${moved.size} of ${outer.size} cells of the other stretches read another half-graben")
     }
 
@@ -398,7 +402,46 @@ class RiftIdentityTest {
                     (tooShort + tooLong).take(6).joinToString { "%.0f".format(it) }
             }
         }
+        // Recorded at TH1-1, whose present rifts on seed 7 at 256 rows held half-grabens longer than
+        // the bar; armed at TH1-1b, whose worlds pass it (docs/DESIGN_LEDGER.md, TH1-1b).
         assertTrue(failures.isEmpty(), "half-grabens outside Earth's lengths: $failures")
+    }
+
+    /**
+     * A world is no more rifted than Earth: its present rifts, measured along each rift's course,
+     * run no farther in all than Earth's whole continental rift boundary, Bird's 27,472 km (*An
+     * updated digital model of plate boundaries*, G-cubed 4, 2003, Table 3), which counts the
+     * transitional steps of young oceans such as the Red Sea's and the Gulf of California's as
+     * continental too, so it is the most a world's rifts on land can be held to.
+     *
+     * A rift is continental crust pulled apart, continent on both sides; TH1-1b drew one wherever
+     * a ridge ran against a continent's edge as well, and this clause fails there (docs/DESIGN_LEDGER.md,
+     * TH1-2). The half-grabens are counted and printed beside it.
+     */
+    @Test
+    fun `a world is no more rifted than Earth`() {
+        val failures = ArrayList<String>()
+        for (seed in seeds) {
+            val grid = grid(seed, coarseRows.last())
+            val report = grid.report
+            val spans = HashMap<Pair<Int, Int>, Pair<Float, Float>>()
+            val halfGrabens = HashSet<Triple<Int, Int, Int>>()
+            report.cell.indices.forEach { entry ->
+                val chain = grid.pairOf(entry) to report.chain[entry]
+                val along = report.alongKm[entry]
+                val span = spans[chain]
+                spans[chain] = if (span == null) along to along else minOf(span.first, along) to maxOf(span.second, along)
+                halfGrabens.add(Triple(grid.pairOf(entry), report.chain[entry], report.ordinal[entry]))
+            }
+            val lengthKm = spans.values.sumOf { (it.second - it.first).toDouble() }
+            val longestKm = spans.values.maxOfOrNull { (it.second - it.first).toDouble() } ?: 0.0
+            println(
+                "RIFT COUNT seed %d at %d rows: %d rifts, %.0f km in all (Earth's continental rift boundary %.0f km), the longest %.0f km; %d half-grabens"
+                    .format(seed, coarseRows.last(), spans.size, lengthKm, EARTH_CONTINENTAL_RIFT_KM, longestKm, halfGrabens.size)
+            )
+            if (lengthKm > EARTH_CONTINENTAL_RIFT_KM) failures += "seed $seed: %.0f km".format(lengthKm)
+        }
+        assertTrue(failures.isEmpty(), "worlds more rifted than Earth: $failures")
     }
 
     /**
@@ -467,8 +510,12 @@ class RiftIdentityTest {
     private companion object {
         const val PAIR_STRIDE = 1000
 
-        /** Where the cuts begin along the rift, away from its end, and how long each gap is: more than `riftWidthKm`. */
-        const val CUT_FROM_THE_END_KM = 1_000f
+        /**
+         * Where the cuts begin along the rift, away from its end, and how long each gap is: more than
+         * `riftWidthKm`. A gap's length from the end, since TH1-2's rifts are continental on both
+         * sides and seed 42's longest runs 959 km, short of the 1,580 km the cuts took from 1,000 km in.
+         */
+        const val CUT_FROM_THE_END_KM = 250f
         const val GAP_KM = 250f
 
         /** The short stretch left between the two gaps. */
@@ -479,5 +526,7 @@ class RiftIdentityTest {
         const val MIN_COMPARED_CELLS = 8
         /** A second world, five thirds as wide as the one the knobs are calibrated on. */
         const val SECOND_WORLD_WIDTH_KM = 20_000.0
+        /** Earth's continental rift boundary, km: Bird 2003, Table 3. */
+        const val EARTH_CONTINENTAL_RIFT_KM = 27_472.0
     }
 }

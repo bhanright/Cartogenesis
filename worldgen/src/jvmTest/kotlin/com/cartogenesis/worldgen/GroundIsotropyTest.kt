@@ -73,7 +73,7 @@ class GroundIsotropyTest : BorrowsSharedWorlds() {
         // allowed; armed at C1b2, whose rain moved the ground; recorded again at A1-1, whose
         // calendar seasons moved it again and left seed 99's coast at 0.94, the four together at
         // 1.00 (docs/DESIGN_LEDGER.md, K2, C1b2 and A1-1).
-        KnownFailures.expect("A1-1: one world's coast projects further one way than its length allows", "seed 99 0.92, together 0.99") {
+        KnownFailures.expect("A1-1: one world's coast projects further one way than its length allows", "seed 7 1.24, seed 42 1.44, seed 1234 1.27, seed 99 1.34, together 1.32") {
             if (!(past.isEmpty() && abs(ln(pooled)) <= pooledBar)) {
                 throw RecordedViolation(
                     "the coasts project more one way than the other on the ground, past what their length allows: $found",
@@ -113,6 +113,9 @@ class GroundIsotropyTest : BorrowsSharedWorlds() {
         }
         // Armed again at Fix 3b: under the capped explicit update seed 99's steep ground read 14.9
         // m/km along a row and 18.0 down a column; with the cap gone it reads 25.9 and 26.7.
+        // Recorded at TH1-1b: seed 42's steep ground read 15.8 along a row and 19.2 down a column,
+        // 1.22 apart against the bar's 1.2, the cause not traced; armed at TH1-2, whose worlds pass
+        // it (docs/DESIGN_LEDGER.md, TH1-1b and TH1-2).
         assertTrue(
             steeper.isEmpty(),
             "the steep ground falls further down a column than along a row, past a fifth: " + steeper.joinToString()

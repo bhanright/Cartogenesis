@@ -780,51 +780,20 @@ class DebugMapDump {
      * at the same ground.
      */
     /**
-     * H1, before and after: the same worlds with the tectonic history off and on.
-     *
-     * "Off" is `historyEpochs = 1`, which is the generator this chunk replaced bit for bit, so the
-     * pair of elevation maps is a genuine before-and-after of the same seed rather than two
-     * different worlds. The plates view says where the present boundaries are, and the crust-age
-     * view says which epoch built which country — the picture to look for is an old worn range
-     * standing well inside a plate interior, with a young sharp one on the edge beyond it.
+     * The tectonic history's worlds: elevation, plates and crust age, at the application's 1,024
+     * rows. The crust-age view says what built which country and when — the picture to look for is
+     * an old worn suture standing well inside a plate, with a young belt on the edge beyond it.
      */
     @Test
     fun `dump the tectonic history`() {
         outputDir.mkdirs()
         listOf(7L, 42L, 1234L).forEach { seed ->
-            val base = WorldGenConfig.forRows(seed, 512)
-                .atResolution(2048, 1024)
-            listOf(1 to "before", base.tectonics.historyEpochs to "after").forEach { (epochs, tag) ->
-                val config = base.copy(tectonics = base.tectonics.copy(historyEpochs = epochs))
-                val world = WorldGenerationEngine.generateBlocking(config)
-                write(render(world, Mode.ELEVATION), "history-seed$seed-1024-$tag-elevation.png")
-                write(render(world, Mode.PLATES), "history-seed$seed-1024-$tag-plates.png")
-                write(render(world, Mode.FANTASY), "history-seed$seed-1024-$tag-fantasy.png")
-                if (epochs > 1) {
-                    write(render(world, Mode.CRUST_AGE), "history-seed$seed-1024-crustage.png")
-                }
-
-                // How much of the land each epoch built, and how much of it is cratonic — the
-                // tally behind the pictures.
-                val k = config.tectonics.historyEpochs.coerceAtLeast(1)
-                val bands = IntArray(k + 1)
-                var land = 0
-                for (i in world.sea.isLand.indices) {
-                    if (!world.sea.isLand[i]) continue
-                    land++
-                    val age = world.plates.crustAge.data[i]
-                    bands[if (age >= 1f) k else (age * k).toInt().coerceIn(0, k - 1)]++
-                }
-                val text = (0 until k).joinToString(" ") {
-                    "%d-ago %d%%".format(it, bands[it] * 100 / land.coerceAtLeast(1))
-                }
-                println(
-                    "HISTORYMAP seed %d %s: %d%% land, %d rivers, crust %s cratonic %d%%".format(
-                        seed, tag, (world.landFraction() * 100).toInt(),
-                        world.rivers.rivers.size, text, bands[k] * 100 / land.coerceAtLeast(1)
-                    )
-                )
-            }
+            val config = WorldGenConfig.forRows(seed, 512).atResolution(2048, 1024)
+            val world = WorldGenerationEngine.generateBlocking(config)
+            write(render(world, Mode.ELEVATION), "history-seed$seed-1024-elevation.png")
+            write(render(world, Mode.PLATES), "history-seed$seed-1024-plates.png")
+            write(render(world, Mode.FANTASY), "history-seed$seed-1024-fantasy.png")
+            write(render(world, Mode.CRUST_AGE), "history-seed$seed-1024-crustage.png")
         }
         println("History maps written to ${outputDir.absolutePath}")
     }
@@ -1131,7 +1100,8 @@ class DebugMapDump {
                     // Warm where the crust is young and cold where it is old, with cratonic
                     // ground left grey: the map of what built each piece of country and when.
                     Mode.CRUST_AGE -> {
-                        val age = world.plates.crustAge.data[i]
+                        // Over the 900 Myr of three old epochs, and grey past them.
+                        val age = world.plates.crustAgeMyr.data[i] / CRUST_AGE_SPAN_MYR
                         val tint = if (age >= 1f) 0x8C8C86
                         else if (age < 0.5f) mix(0xC1272D, 0xE0A020, age * 2f)
                         else mix(0xE0A020, 0x2E6B8C, (age - 0.5f) * 2f)
@@ -1382,3 +1352,6 @@ class DebugMapDump {
  * way, so they draw across the same span of pixels the map does.
  */
 internal fun debugRiverStroke(widthRatio: Float): Float = 0.8f + 4.2f * widthRatio.coerceIn(0f, 1f)
+
+/** The crust-age view spans three of the old 300 Myr epochs, 900 Myr, and greys everything older. */
+private const val CRUST_AGE_SPAN_MYR = 900f

@@ -175,7 +175,15 @@ class BoundaryLayerTest : BorrowsSharedWorlds() {
         println("BOUNDARY LAYER mass left over the sphere, worst %.2e of the convergence's size; the balance's lowest correlation %.3f (bar %.2f)"
             .format(worstMass, lowestCorrelation, BALANCE_CORRELATION))
         assertTrue(worstMass < MASS_TOLERANCE, "the layer's convergence leaves $worstMass of itself over the sphere")
-        assertTrue(lowestCorrelation > BALANCE_CORRELATION, "the layer's vertical motion follows the pressure's drag balance at r = $lowestCorrelation")
+        // Recorded at TH1-1, whose worlds' continents lie inside plates and whose sea covers 71% of
+        // the planet: on one of them the layer's convergence followed the drag balance less closely
+        // than the bar. Armed at TH1-1b, whose worlds passed it; recorded at TH1-2, on whose seed
+        // 1234 the July layer read r = 0.305, and armed again at TH1-2c, whose worlds pass it
+        // (docs/DESIGN_LEDGER.md, TH1-2c).
+        assertTrue(
+            lowestCorrelation > BALANCE_CORRELATION,
+            "the layer's vertical motion follows the pressure's drag balance at r = $lowestCorrelation"
+        )
     }
 
     /**
@@ -297,6 +305,8 @@ class BoundaryLayerTest : BorrowsSharedWorlds() {
         // the model's lowest level reads, and seed 99's January subtropics fell to r = 0.47
         // (docs/DESIGN_LEDGER.md, A1-6b). Armed at W2e, whose condensation heats the waves where the
         // two layers' march rains (docs/DESIGN_LEDGER.md, W2e).
+        // Recorded at TH1-1, on whose worlds one reading fell outside; armed at TH1-1b, whose worlds
+        // pass it (docs/DESIGN_LEDGER.md, TH1-1b).
         assertTrue(failures.isEmpty(), "readings of the model's and the diagnosed layer's convergence disagree: $failures")
     }
 

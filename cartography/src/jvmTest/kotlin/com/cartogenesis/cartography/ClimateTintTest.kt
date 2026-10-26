@@ -263,7 +263,12 @@ class ClimateTintTest : BorrowsSharedWorlds() {
         // again at W2e, whose wetter gallery world draws every style's steppe inside its band.
         // Recorded again at W2h, whose drier gallery world puts Scroll's steppe 23% of the way from
         // its desert to its forest (docs/TODO.md, "The drawing's figures on W2h's ground").
-        KnownFailures.expect("W2h: Scroll's steppe stands outside its band on the gallery's world", "Scroll: a steppe stands 23% of the way from the desert to the forest, outside 25-75%") {
+        // Armed at TH1-1, whose worlds passed it. Recorded again at TH1-1b, whose gallery world put
+        // Scroll's steppe 80% of the way from its desert to its forest; armed again at TH1-2, whose
+        // gallery world draws every style's steppe inside its band (docs/DESIGN_LEDGER.md, TH1-2).
+        // Recorded again at TH1-2c, whose gallery world puts Scroll's steppe 88% of the way from its
+        // desert to its forest (docs/DESIGN_LEDGER.md, TH1-2c; docs/TODO.md).
+        KnownFailures.expect(STEPPE_NEAR_THE_FOREST_ON_THE_LAWS_TERRAIN, "Scroll: a steppe stands 88% of the way from the desert to the forest, outside 25-75%") {
             if (outside.isNotEmpty()) throw RecordedViolation(outside.joinToString("; "), outside.joinToString("; "))
         }
     }

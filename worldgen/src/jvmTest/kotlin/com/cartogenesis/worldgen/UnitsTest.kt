@@ -250,6 +250,9 @@ class UnitsTest : BorrowsSharedWorlds() {
             )
         }
         val furthest = worst.maxByOrNull { abs(it.second) }!!
+        // Recorded at TH1-2, on whose seed 7 the cut landed 1,204 m under the declared shoreline: the
+        // history's crust there lost an eighth of its area, so the land's share was cut further down
+        // its margins; armed again at TH1-2c, whose worlds pass it (docs/DESIGN_LEDGER.md, TH1-2c).
         assertTrue(
             "seed ${furthest.first}: the sea-level cut lands" +
                 " ${"%.0f".format(furthest.second)} m from the level WorldScale declares the" +

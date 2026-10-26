@@ -2,430 +2,332 @@ package com.cartogenesis.worldgen
 
 import com.cartogenesis.worldgen.model.WorldGenConfig
 import com.cartogenesis.worldgen.pipeline.BoundaryClass
-import com.cartogenesis.worldgen.pipeline.PlateResult
-import com.cartogenesis.worldgen.pipeline.PlateStage
-import com.cartogenesis.worldgen.pipeline.TerrainStage
+import com.cartogenesis.worldgen.pipeline.CrustHistory
+import com.cartogenesis.worldgen.pipeline.TectonicHistory
 import java.util.Locale
+import kotlin.math.abs
+import kotlin.math.ln
 import kotlin.test.Test
-import kotlin.test.assertEquals
-import kotlin.test.assertTrue
+import org.junit.Assert.assertEquals
+import org.junit.Assert.assertTrue
 
 /**
- * Whether the world carries the scars of boundaries that are gone.
+ * The tectonic history's own guards, read on its lattice before any map is drawn
+ * (docs/DESIGN_LEDGER.md, TH1-1 and TH1-1b): the crust's budget closes, the plates are Earth's in
+ * number, size and speed, the floor ages from its ridges, the crust stands within Earth's
+ * thicknesses, and the same seed makes the same history.
  *
- * A drift vector that only classifies today's boundaries builds a world where nothing has ever
- * moved: every range is young, every range is high, and every range sits exactly on a plate edge.
- * Earth's continents do not look like that. The Appalachians and the Urals are collisions whose
- * boundary closed hundreds of millions of years ago — a thousand kilometres from any plate edge,
- * worn to a third of Alpine height and spread over a wider province than the Alps occupy — and the
- * Benue trough and the North Sea graben are rifts that opened, failed and filled with sediment.
+ * The history does not depend on the map's grid, so one history per standard seed serves every
+ * clause; it is run once and kept for the class.
  *
- * So this measures the three things that distinguish an old belt from a young one, on the same
- * world, by the same method:
- *
- * - **far** — the tallest thing the history built stands well beyond every present boundary;
- * - **lower** — an old belt's peak relief is a stated factor below a present belt's;
- * - **broader** — its full width at half that peak is a stated factor above a present belt's.
- *
- * The old belts are isolated by differencing: a world with a past epoch against the same world
- * with `historyEpochs = 1`, minus the mean of the difference, which is exactly how
- * [BoundaryPairTest] isolates the hotspot chains. What is left is that epoch's own uplift, with a
- * baseline of zero. The present belts are measured on the one-epoch world against the plate
- * interior, the reference level [BoundaryPairTest] reads. Both are then reduced to a peak and a
- * full width at half height by a mean radial profile away from *their own* epoch's boundaries —
- * an old belt cannot be measured against a boundary that has moved — which is why
- * [PlateStage.epochBoundaries] exists. Both are measured with isostasy off, for the reason that
- * test gives: the blurred step between the two crusts is the same size as the belts and would be
- * measured as one of them.
- *
- * The "far" guard is shown failing on a history whose past boundaries lie where the present ones
- * do — see [`the guard finds nothing inland when the plates never moved`].
- *
- * At [SharedWorlds.DETAIL_ROWS]: the belts' age blur spreads a different share of its radius on
- * each grid (docs/DESIGN_LEDGER.md, Q2), so an old belt's breadth is read on the grid its bars were
- * set on.
+ * Main had no history: its crust was a plate's type, its area whatever the plates' polygons
+ * enclosed and its floor's age a blur of the boundary distance, so none of these has a figure on
+ * main to fail on, and each clause's control is said where it is written.
  */
 class TectonicHistoryTest {
 
-    private val seeds = listOf(7L, 42L, 1234L)
+    /**
+     * The crust's area and volume at the end are what they were at the start plus everything the
+     * budget booked as made and less everything it booked as lost, and the net is no more than
+     * stretching could make.
+     *
+     * The closing is an independent count: the end is the samples counted, the closing is the start
+     * plus the budget's terms, and every place crust is made or lost books itself. The net bar is
+     * twice what Earth's own rifted margins added: Bradley's 105,000 km of passive margin today,
+     * each adding `W (1 - 1/1.853)` of stretched crust per kilometer of its length
+     * ([TectonicHistory.STRETCHED_WIDTH_PER_UNSTRETCHED], Watts's 300 km), over Earth's continental
+     * crust, 0.41 of the sphere: 6.9%. Earth is midway through its dispersal; a world dispersed
+     * twice as far, or assembled as tightly as it is dispersed, moves twice that.
+     */
+    @Test
+    fun `the crust's area and volume budgets close`() {
+        for (seed in SEEDS) {
+            val history = historyOf(seed)
+            val budget = history.budget
+            val areaGap = abs(budget.closingAreaKm2 - budget.endingAreaKm2) / budget.startingAreaKm2
+            val volumeGap = abs(budget.closingVolumeKm3 - budget.endingVolumeKm3) / budget.startingVolumeKm3
+            val net = budget.endingAreaKm2 / budget.startingAreaKm2 - 1.0
+            val config = configOf(seed)
+            val gainPerKm = config.tectonics.riftedMarginWidthKm * (1.0 - 1.0 / TectonicHistory.STRETCHED_WIDTH_PER_UNSTRETCHED)
+            val earthGain = EARTH_PASSIVE_MARGIN_KM * gainPerKm / (EARTH_CONTINENTAL_CRUST_SHARE * EARTH_SURFACE_KM2)
+            val netBar = NET_BAR_IN_EARTH_GAINS * earthGain
+            println(
+                "HISTORY BUDGET seed %d: area %.4g -> %.4g km2 (net %+.4f, bar %.4f), closing gap %.2e; volume %.4g -> %.4g km3, closing gap %.2e"
+                    .format(Locale.ROOT, seed, budget.startingAreaKm2, budget.endingAreaKm2, net, netBar, areaGap,
+                        budget.startingVolumeKm3, budget.endingVolumeKm3, volumeGap)
+            )
+            assertTrue("seed $seed: the area budget does not close, gap $areaGap of the start", areaGap <= CLOSING_TOLERANCE)
+            assertTrue("seed $seed: the volume budget does not close, gap $volumeGap of the start", volumeGap <= CLOSING_TOLERANCE)
+            assertTrue("seed $seed: the crust's area moved by $net, more than $netBar", abs(net) <= netBar)
+        }
+    }
 
-    private fun platesOf(
-        seed: Long,
-        epochs: Int,
-        flatten: Boolean = true,
-        driftKm: Double? = null
-    ): PlateResult {
-        val base = WorldGenConfig.forRows(seed, SharedWorlds.DETAIL_ROWS)
-        val config = base.copy(
-            tectonics = base.tectonics.copy(
-                historyEpochs = epochs,
-                plateSpeedMmPerYear = driftKm?.let { it * MILLIMETERS_PER_KM / base.tectonics.epochLengthYears }
-                    ?: base.tectonics.plateSpeedMmPerYear
-            ),
-            // Flattening the plate interiors is switching isostasy off since S2, where before it
-            // was setting the step between them to zero: either way what is left is one level for
-            // every crust, so a belt's radial profile is the belt and not the crust under it.
-            isostasy = base.isostasy.copy(enabled = !flatten)
-        )
-        return PlateStage.generate(config, TerrainStage.generate(config))
+    /** The same seed, run twice, makes the same history to the bit. */
+    @Test
+    fun `the same seed makes the same history`() {
+        val seed = SEEDS.first()
+        val first = historyOf(seed)
+        val second = TectonicHistory.run(configOf(seed))
+        assertTrue(first.plateOf.contentEquals(second.plateOf))
+        assertTrue(first.continental.contentEquals(second.continental))
+        assertTrue(first.baseKm.contentEquals(second.baseKm))
+        assertTrue(first.excessKm.contentEquals(second.excessKm))
+        assertTrue(first.formedMyrAgo.contentEquals(second.formedMyrAgo))
+        assertTrue(first.boundaryClass.contentEquals(second.boundaryClass))
+        assertEquals(first.budget.endingVolumeKm3, second.budget.endingVolumeKm3, 0.0)
+        for (plate in first.plateRotations.indices) assertTrue(first.plateRotations[plate].contentEquals(second.plateRotations[plate]))
     }
 
     /**
-     * What `historyEpochs` below one means, and that a second epoch is not a no-op.
+     * A dozen plates or more, and none larger than [LARGEST_PLATE_SHARE] of the sphere: Earth had
+     * a dozen or more even while Pangaea stood, and its largest, the Pacific, is 0.205 of the sphere
+     * (Bird 2003, Table 1: 2.577 of 12.566 steradians). The lattice is equal-area, so a plate's
+     * share is its share of the points.
      *
-     * The contract H1 made — that a one-epoch history is the arithmetic of the generator that had
-     * no history at all — has had nothing to be compared with since C5 retired the checksums taken
-     * from that generator, and no run of today's code can produce the reference. What can be held
-     * is narrower and is what this holds: zero epochs is read as one, bit for bit, so the setting's
-     * lower end is the present epoch alone and not a world with no belts; and two epochs give
-     * different bits from one, so the history is doing something and the setting is not dead.
+     * Main's plates were drawn, not grown, and stood inside this (0.13 to 0.25 on the design's three
+     * seeds); the design's prototype, which welded whole plates at every collision, did not, at 0.27
+     * to 0.35, and that is the failure this guard is for.
      */
     @Test
-    fun `zero epochs is read as one, and a second epoch changes the ground`() {
-        // Measured for every seed before anything is asserted, so one run prints all six figures
-        // rather than stopping at the first that has moved.
-        val measured = LinkedHashMap<Pair<Long, Int>, Long>()
-        seeds.forEach { seed ->
-            listOf(0, 1, 2).forEach { epochs ->
-                val base = WorldGenConfig.forRows(seed, SharedWorlds.DETAIL_ROWS)
-                val config = base.copy(tectonics = base.tectonics.copy(historyEpochs = epochs))
-                val plates = PlateStage.generate(config, TerrainStage.generate(config))
-                var checksum = 0L
-                plates.height.data.forEach { checksum = checksum * 31 + it.toRawBits() }
-                println("HISTORY seed $seed epochs=$epochs height checksum $checksum")
-                measured[seed to epochs] = checksum
-                assertTrue(
-                    plates.crustAge.data.all { it in 0f..1f },
-                    "seed $seed: crust age left its range"
-                )
+    fun `the plates are Earth's in number and size`() {
+        for (seed in SEEDS) {
+            val history = historyOf(seed)
+            val counts = IntArray(history.plateRotations.size)
+            for (plate in history.plateOf) counts[plate]++
+            val live = counts.count { it > 0 }
+            val largest = counts.max().toDouble() / history.plateOf.size
+            println("HISTORY PLATES seed %d: %d plates, the largest %.3f of the sphere".format(Locale.ROOT, seed, live, largest))
+            assertTrue("seed $seed: $live plates, fewer than $FEWEST_PLATES", live >= FEWEST_PLATES)
+            assertTrue("seed $seed: the largest plate is $largest of the sphere", largest <= LARGEST_PLATE_SHARE)
+        }
+    }
+
+    /**
+     * Once the supercontinent parts, the plates move at Earth's speeds: those more than half
+     * continental at Zahirovic et al.'s 28 mm a year, the median of every such plate over the last
+     * 200 Myr (*Tectonic speed limits from plate kinematic reconstructions*, EPSL 418, 2015,
+     * section 3.5), the plates a slab pulls being scaled to their 85.
+     *
+     * The speeds are each live plate's root-mean-square speed at every step after the breakup, the
+     * sample Zahirovic et al. take of Earth's plates since Pangea's; pooled over the seeds that
+     * broke. The bars stand midway between Earth's figure and the history TH1-1 left, whose plates
+     * felt only the drag under their bases: plates more than half continental at a median of 8 mm a
+     * year against Earth's 28, so the bar is 18, and above it midway to the 85 of the fastest kind of
+     * plate, 56.5. Printed beside it, not held: how a slab-pulled plate's speed falls with its area,
+     * the slope of its log speed on its log area, where Earth's NNR-MORVEL56 Pacific, Nazca, Cocos and
+     * Philippine Sea plates, 36 times apart in area, read 0.00 (Argus, Gordon and DeMets 2011,
+     * Table 1); the slab's resistance takes the history's from basal drag's -0.29 to -0.23, a
+     * fifth of the way.
+     *
+     * The control is the same histories with the slab's resistance at nothing, basal drag alone
+     * (`TectonicsConfig.slabResistanceKm`), which fails it.
+     */
+    @Test
+    fun `the plates move at Earth's speeds once the supercontinent parts`() {
+        val model = speedsOf(SEEDS.map { historyOf(it) }, "model")
+        val control = speedsOf(SEEDS.map { TectonicHistory.run(configOf(it).let { config -> config.copy(tectonics = config.tectonics.copy(slabResistanceKm = 0.0)) }) }, "basal drag alone")
+        assertTrue("plates more than half continental move at ${model.first} mm a year at the median, under $CONTINENTAL_SPEED_LOW_BAR", model.first >= CONTINENTAL_SPEED_LOW_BAR)
+        assertTrue("plates more than half continental move at ${model.first} mm a year at the median, over $CONTINENTAL_SPEED_HIGH_BAR", model.first <= CONTINENTAL_SPEED_HIGH_BAR)
+        assertTrue(
+            "the control passes, so the slab's resistance is not what brings the speeds to Earth's: ${control.first}",
+            control.first < CONTINENTAL_SPEED_LOW_BAR
+        )
+    }
+
+    /**
+     * The median speed of the plates more than half continental after their breakup, mm a year, and
+     * the slope of a slab-pulled plate's log speed against its log area, over [histories]; printed
+     * with Zahirovic et al.'s other categories beside Earth's figures.
+     */
+    private fun speedsOf(histories: List<CrustHistory>, label: String): Pair<Double, Double> {
+        val continental = ArrayList<Double>()
+        val bounded = ArrayList<Double>()
+        val noTrench = ArrayList<Double>()
+        val all = ArrayList<Double>()
+        val logArea = ArrayList<Double>()
+        val logSpeed = ArrayList<Double>()
+        for (history in histories) {
+            if (history.breakupMyrAgo.isNaN()) continue
+            val record = history.plateSpeeds
+            for (index in 0 until record.size) {
+                if (record.myrAgo[index] >= history.breakupMyrAgo) continue
+                val speed = record.rmsSpeedMmPerYear[index].toDouble()
+                val continent = record.continentalShare[index]
+                val subducting = record.subductingEdgeShare[index]
+                all.add(speed)
+                if (continent > CONTINENTAL_PLATE_SHARE) continental.add(speed)
+                if (subducting == 0f) noTrench.add(speed)
+                if (continent < OCEANIC_PLATE_SHARE && subducting > SLAB_BOUNDED_EDGE_SHARE) {
+                    bounded.add(speed)
+                    if (speed > 0.0) {
+                        logArea.add(ln(record.areaShare[index].toDouble()))
+                        logSpeed.add(ln(speed))
+                    }
+                }
             }
         }
-        seeds.forEach { seed ->
-            val none = measured.getValue(seed to 0)
-            val one = measured.getValue(seed to 1)
-            val two = measured.getValue(seed to 2)
-            assertEquals(
-                none, one,
-                "seed $seed: zero epochs is no longer read as one"
-            )
-            assertTrue(
-                two != one,
-                "seed $seed: two epochs give the same bits as one, so the history built nothing"
-            )
+        fun median(values: List<Double>) = values.sorted().let { if (it.isEmpty()) Double.NaN else it[it.size / 2] }
+        val meanArea = logArea.average()
+        val meanSpeed = logSpeed.average()
+        var covariance = 0.0
+        var variance = 0.0
+        for (index in logArea.indices) {
+            covariance += (logArea[index] - meanArea) * (logSpeed[index] - meanSpeed)
+            variance += (logArea[index] - meanArea) * (logArea[index] - meanArea)
         }
-    }
-
-    @Test
-    fun `an old belt stands far from any present boundary`() {
-        val short = ArrayList<Pair<Long, Float>>()
-        seeds.forEach { seed ->
-            val inland = inlandRelief(seed, DEFAULT_EPOCHS)
-            println(
-                ("HISTORY seed %d: the tallest ground the history built beyond %.0f km of " +
-                    "every present boundary stands %+.4f, at %.0f km out")
-                    .format(seed, MIN_INLAND_KM, inland.relief, inland.distance)
-            )
-            if (inland.relief < MIN_BELT_PEAK) short += seed to inland.relief
-        }
-        // A known failure on seed 42 from when the distance was put on the ground until K1, kept at
-        // this distance because the never-moved control reads over the bar nearer in ([MIN_INLAND_KM]).
-        // Armed at K2: on the Earth-sized planet, with an epoch's drift Earth's plate speed over
-        // the epoch, 8,400 km, every seed's old belts stand clear of its present boundaries
-        // (docs/DESIGN_LEDGER.md, K2).
-        assertTrue(
-            short.isEmpty(),
-            "the history's tallest ground more than $MIN_INLAND_KM km from any present " +
-                "boundary is under $MIN_BELT_PEAK on " +
-                short.joinToString { (seed, relief) -> String.format(Locale.ROOT, "seed %d at %.4f", seed, relief) } +
-                " — an old belt that never leaves a modern plate edge is not a scar, it is the same range twice"
-        )
-    }
-
-    /**
-     * The same measurement on a history whose plates never moved, which is the case the guard's
-     * own message describes: every past epoch's boundaries lie where today's do, so its belts are
-     * the modern belts again, lower and wider, and "an old belt that never leaves a modern plate
-     * edge is not a scar, it is the same range twice". Three epochs, as the shipped world has, with
-     * `epochDriftKm` at zero and nothing else changed, measured against the same one-epoch world
-     * the guard above differences against.
-     */
-    @Test
-    fun `the guard finds nothing inland when the plates never moved`() {
-        seeds.forEach { seed ->
-            val inland = inlandRelief(seed, DEFAULT_EPOCHS, driftKm = 0.0)
-            println(
-                "HISTORY control seed %d, three epochs that never moved: tallest inland relief %+.6f (bar %.4f)"
-                    .format(seed, inland.relief, MIN_BELT_PEAK)
-            )
-            assertTrue(
-                inland.relief < MIN_BELT_PEAK,
-                "seed $seed: a history whose plates never moved still reads ${inland.relief} of " +
-                    "relief more than $MIN_INLAND_KM km from every present boundary, so the " +
-                    "guard above cannot tell a scar from the modern belt stamped twice"
-            )
-        }
-    }
-
-    @Test
-    fun `an old belt is lower and broader than a present one`() {
-        val old = seeds.map { seed -> beltProfile(oldRelief(seed, 2), epochBoundaries(seed, 1)) }
-        val present = seeds.map { seed ->
-            beltProfile(presentRelief(seed), epochBoundaries(seed, 0))
-        }
-
-        seeds.forEachIndexed { index, seed ->
-            println(
-                "HISTORY seed %d old belt peak %+.4f FWHM %.0f cells, present peak %+.4f FWHM %.0f cells"
-                    .format(
-                        seed, old[index].peak, old[index].fullWidth,
-                        present[index].peak, present[index].fullWidth
-                    )
-            )
-        }
-
-        // Pooled, because a belt's height is proportional to how hard its pair happens to be
-        // converging while its width is not - the same reason BoundaryPairTest pools six worlds.
-        val oldPeak = old.map { it.peak.toDouble() }.average()
-        val presentPeak = present.map { it.peak.toDouble() }.average()
-        val oldWidth = old.map { it.fullWidth.toDouble() }.average()
-        val presentWidth = present.map { it.fullWidth.toDouble() }.average()
+        val slope = if (variance > 0.0) covariance / variance else Double.NaN
         println(
-            ("HISTORY pooled: old peak %.4f against present %.4f (%.2fx lower), " +
-                "old FWHM %.0f against present %.0f cells (%.2fx broader)")
-                .format(
-                    oldPeak, presentPeak, presentPeak / oldPeak,
-                    oldWidth, presentWidth, oldWidth / presentWidth
-                )
+            ("HISTORY SPEEDS %s: every plate %.1f mm/yr (Earth 42), over half continental %.1f (28), slab-bounded oceanic %.1f (85)," +
+                " no trench %.1f (26); slope of log speed on log area for the slab-bounded %.3f (Earth 0.00); samples %d, %d, %d, %d")
+                .format(Locale.ROOT, label, median(all), median(continental), median(bounded), median(noTrench), slope,
+                    all.size, continental.size, bounded.size, noTrench.size)
         )
-
-        assertTrue(
-            presentPeak / oldPeak >= MIN_LOWER,
-            "the old belts stand only ${presentPeak / oldPeak}x below the present ones, wanted " +
-                "at least ${MIN_LOWER}x — the Appalachians are about a third of Alpine height"
-        )
-        assertTrue(
-            oldWidth / presentWidth >= MIN_BROADER,
-            "the old belts are only ${oldWidth / presentWidth}x broader than the present ones, " +
-                "wanted at least ${MIN_BROADER}x"
-        )
+        return median(continental) to slope
     }
 
     /**
-     * The bands of [PlateResult.crustAge], reported per seed: how much of the world each epoch
-     * claims, and how much is cratonic ground no epoch ever deformed. H3 reads this field.
+     * The floor is youngest at its ridges and falls in area with age: the floor at a ridge is no
+     * older than its own spreading made it, and each sixty million years of age holds less floor than
+     * the sixty before. A ridge point lies within a neighbor's reach of the axis, 1.6 of the
+     * lattice's spacings, and floor that far out has been spreading for that distance over the
+     * ridge's half rate; one step's carry besides, since a point is read at the end of the step it
+     * moved in. The median, not the mean: a ridge newly opened through old floor, as a ridge jump
+     * opens one, has old floor at its axis for its first steps. A floor made at the ridges and consumed at the trenches, oldest first, has its area
+     * fall with age; one whose age were drawn some other way, as main's blur of the boundary
+     * distance, has no reason to (main's floor read 12 Myr mean, 24 at its 90th percentile: the
+     * design's measures).
      */
     @Test
-    fun `report the crust-age bands`() {
-        seeds.forEach { seed ->
-            val plates = platesOf(seed, DEFAULT_EPOCHS, flatten = false)
-            val bands = IntArray(DEFAULT_EPOCHS + 1)
-            plates.crustAge.data.forEach { age ->
-                val band =
-                    if (age >= 1f) DEFAULT_EPOCHS
-                    else (age * DEFAULT_EPOCHS).toInt().coerceIn(0, DEFAULT_EPOCHS - 1)
-                bands[band]++
+    fun `the ocean floor ages from its ridges`() {
+        for (seed in SEEDS) {
+            val history = historyOf(seed)
+            val config = configOf(seed)
+            var ridgePoints = 0
+            val ridgeAges = ArrayList<Double>()
+            var ridgeHalfRateSum = 0.0
+            val bins = DoubleArray(AGE_BINS)
+            for (point in history.plateOf.indices) {
+                if (history.continental[point]) continue
+                val age = history.formedMyrAgo[point].toDouble()
+                if (history.boundaryClass[point] == BoundaryClass.OCEAN_RIDGE.ordinal) {
+                    ridgePoints++
+                    ridgeAges.add(age)
+                    // Opening is a negative closing; mm a year is km per Myr; half of it is each flank's.
+                    ridgeHalfRateSum += -history.boundaryClosingMmPerYear[point] / 2.0
+                }
+                val bin = (age / AGE_BIN_MYR).toInt()
+                if (bin < AGE_BINS) bins[bin]++
             }
-            val cells = plates.crustAge.data.size
-            val text = (0 until DEFAULT_EPOCHS).joinToString(" ") {
-                "%d-epochs-ago %.1f%%".format(it, bands[it] * 100.0 / cells)
-            }
+            val ridgeMedian = ridgeAges.sorted().getOrElse(ridgeAges.size / 2) { 0.0 }
+            val halfRate = ridgeHalfRateSum / ridgePoints.coerceAtLeast(1)
+            val bound = RIDGE_REACH_SPACINGS * history.sphere.spacingKm / halfRate + config.tectonics.historyStepMyr
             println(
-                "HISTORY seed %d crust age: %s cratonic %.1f%%"
-                    .format(seed, text, bands[DEFAULT_EPOCHS] * 100.0 / cells)
+                "HISTORY FLOOR seed %d: %d ridge points of median age %.1f Myr, mean half rate %.1f km/Myr, bound %.1f; floor by 60 Myr of age %s"
+                    .format(Locale.ROOT, seed, ridgePoints, ridgeMedian, halfRate, bound, bins.joinToString(" ") { "%.0f".format(Locale.ROOT, it) })
             )
-            assertTrue(bands[0] > 0, "seed $seed has no present-epoch crust")
-        }
-    }
-
-    private fun configOf(seed: Long, epochs: Int): WorldGenConfig {
-        val base = WorldGenConfig.forRows(seed, SharedWorlds.DETAIL_ROWS)
-        return base.copy(
-            tectonics = base.tectonics.copy(historyEpochs = epochs),
-            isostasy = base.isostasy.copy(enabled = false)
-        )
-    }
-
-    private fun epochBoundaries(seed: Long, epochsAgo: Int) =
-        PlateStage.epochBoundaries(configOf(seed, DEFAULT_EPOCHS), epochsAgo)
-
-    /**
-     * The uplift the past epochs added, isolated by differencing, in the one-epoch world's own
-     * units.
-     *
-     * [PlateStage] normalizes its height field over its own range before returning it, so a world
-     * with more relief in it is not merely offset from a world with less — it is offset *and*
-     * rescaled, and a plain difference would carry a slice of the present belts and of the terrain
-     * noise along with the old ones. So the two fields are brought into one frame first, by a
-     * least-squares affine fit taken over the cells [PlateResult.crustAge] says no epoch ever
-     * deformed: there the two worlds are the same ground, so whatever maps one onto the other there
-     * is the normalization and nothing else. What is left after the difference is the past epochs'
-     * own uplift, with a baseline of zero.
-     *
-     * [epochs] two against one, for the profile comparison, so what is left is a single past
-     * epoch's belts at a single age rather than two ages averaged; three against one, for the
-     * inland guard, so it measures the world the app ships.
-     */
-    private fun oldRelief(seed: Long, epochs: Int, driftKm: Double? = null): FloatArray {
-        val history = platesOf(seed, epochs, driftKm = driftKm)
-        val one = platesOf(seed, 1).height.data
-        val many = history.height.data
-
-        // Cratonic ground: cells no epoch in the history touched at all. They still carry the
-        // terrain noise, so they have the spread a two-parameter fit needs.
-        var n = 0.0
-        var sx = 0.0
-        var sy = 0.0
-        var sxx = 0.0
-        var sxy = 0.0
-        for (i in many.indices) {
-            if (history.crustAge.data[i] < 1f) continue
-            val x = many[i].toDouble()
-            val y = one[i].toDouble()
-            n++; sx += x; sy += y; sxx += x * x; sxy += x * y
-        }
-        assertTrue(n > 1000, "seed $seed has only $n cratonic cells to fit the two frames on")
-        val denominator = n * sxx - sx * sx
-        val a = if (denominator == 0.0) 1.0 else (n * sxy - sx * sy) / denominator
-        val b = (sy - a * sx) / n
-        return FloatArray(many.size) { (a * many[it] + b - one[it]).toFloat() }
-    }
-
-    /**
-     * The present belts' relief above the plate interior, taken over every cell far from any
-     * boundary — the reference level [BoundaryPairTest] reads, on the same flattened world.
-     */
-    private fun presentRelief(seed: Long): FloatArray {
-        val plates = platesOf(seed, 1)
-        val far = (plates.height.width * 0.08f).toInt().coerceAtLeast(1)
-        var total = 0.0
-        var count = 0L
-        for (i in plates.height.data.indices) {
-            if (plates.boundaryDistance.data[i] < far) continue
-            total += plates.height.data[i].toDouble()
-            count++
-        }
-        val baseline = if (count == 0L) 0f else (total / count).toFloat()
-        return FloatArray(plates.height.data.size) { plates.height.data[it] - baseline }
-    }
-
-    private class Inland(val relief: Float, val distance: Float)
-
-    /**
-     * The tallest thing the history built anywhere further than [MIN_INLAND_KM] from a present
-     * boundary — a belt whose plate edge is gone, which is the whole claim of this chunk.
-     */
-    private fun inlandRelief(seed: Long, epochs: Int, driftKm: Double? = null): Inland {
-        val relief = oldRelief(seed, epochs, driftKm)
-        val kmPerCellWidth = WorldGenConfig.forRows(seed, SharedWorlds.DETAIL_ROWS).cellWidthKm.toFloat()
-        val present = platesOf(seed, 1)
-        var best = 0f
-        var at = 0f
-        for (i in relief.indices) {
-            val d = present.boundaryDistance.data[i] * kmPerCellWidth
-            if (d <= MIN_INLAND_KM) continue
-            if (relief[i] > best) { best = relief[i]; at = d }
-        }
-        return Inland(best, at)
-    }
-
-    private class BeltShape(val peak: Float, val fullWidth: Float, val cells: Int)
-
-    /**
-     * A mean radial profile of [relief] away from the boundaries of [boundaries], reduced to the
-     * peak and the full width at half that peak.
-     *
-     * This is [BoundaryPairTest]'s measurement, applied to whichever epoch's boundaries are handed
-     * in: an old belt against the boundary that built it, a present belt against the boundary that
-     * is still there. A bin with too few cells in it is discarded for the same reason that test
-     * discards one.
-     *
-     * Restricted to [BoundaryClass.COLLISION_PLATEAU], which is the Appalachians-against-the-Alps
-     * comparison the spec asks for — both are continent-against-continent orogens. It is also the
-     * only class whose profile is symmetric: an Andean margin carries a trench on its oceanic side
-     * and a range on its continental one, so pooling both sides of one averages a mountain with a
-     * deep, and [BoundaryPairTest] avoids that by filtering on crust type, which a vanished
-     * boundary's plate assignment cannot be asked for here.
-     */
-    private fun beltProfile(
-        relief: FloatArray,
-        boundaries: PlateStage.EpochBoundaries
-    ): BeltShape {
-        val wanted = setOf(BoundaryClass.COLLISION_PLATEAU.ordinal)
-        val bins = 160
-        val total = DoubleArray(bins)
-        val count = IntArray(bins)
-        var cells = 0
-        for (i in relief.indices) {
-            if (boundaries.nearestBoundaryClass[i] !in wanted) continue
-            cells++
-            val bin = boundaries.distanceCells[i].toInt()
-            if (bin !in 0 until bins) continue
-            total[bin] += relief[i].toDouble()
-            count[bin]++
-        }
-
-        fun at(d: Int): Float? = if (count[d] < 24) null else (total[d] / count[d]).toFloat()
-
-        var peak = 0f
-        for (d in 0 until bins) {
-            val v = at(d) ?: continue
-            if (v > peak) peak = v
-        }
-        var half = 0
-        if (peak > 0f) {
-            while (half < bins) {
-                val v = at(half)
-                if (v != null && v < peak / 2f) break
-                half++
+            assertTrue("seed $seed: no ridge at all", ridgePoints > 0)
+            assertTrue("seed $seed: the ridges do not open, half rate $halfRate", halfRate > 0.0)
+            assertTrue("seed $seed: the floor at the ridges is $ridgeMedian Myr old at the median, older than $bound", ridgeMedian <= bound)
+            for (bin in 1 until AGE_BINS) {
+                assertTrue("seed $seed: more floor ${bin * 60}-${bin * 60 + 60} Myr old than younger", bins[bin] < bins[bin - 1])
             }
         }
-        return BeltShape(peak, half * 2f, cells)
+    }
+
+    /**
+     * Continental crust thinner than the ocean's own has been stretched at a rift, as the
+     * hyper-extended margins off Iberia and Newfoundland have; and crust thicker than Tibet's covers
+     * no more of the continents than Earth's land above 4 km covers of its land.
+     *
+     * Tibet's crust is the standard column and the 33 km of excess the history's sutures begin with,
+     * 74 km, which stands about 4.6 km above the standard column by Airy; Earth's land above 4 km is
+     * 2.0% of its land (ETOPO5 at 39 km, the design's measures), and a share of the land is more
+     * than the same area's share of the crust, so the bar is loose by the land's share of the crust.
+     * No cap holds the crust under it: the lower crust's flow and erosion do (docs/DESIGN_LEDGER.md,
+     * TH1-1).
+     */
+    @Test
+    fun `the crust stands within Earth's thicknesses`() {
+        for (seed in SEEDS) {
+            val history = historyOf(seed)
+            val config = configOf(seed)
+            val tibetKm = config.isostasy.continentalCrustThicknessKm + TectonicHistory.TIBET_EXCESS_KM.toFloat()
+            var continental = 0
+            var thicker = 0
+            var thinnest = Float.MAX_VALUE
+            var thickest = 0f
+            var thinUnstretched = 0
+            for (point in history.plateOf.indices) {
+                if (!history.continental[point]) continue
+                val thickness = history.baseKm[point] + history.excessKm[point]
+                continental++
+                if (thickness > tibetKm) thicker++
+                thinnest = minOf(thinnest, thickness)
+                thickest = maxOf(thickest, thickness)
+                if (thickness < config.isostasy.oceanicCrustThicknessKm && history.riftMyrAgo[point].isNaN()) thinUnstretched++
+            }
+            val share = thicker.toDouble() / continental
+            println(
+                "HISTORY THICKNESS seed %d: %.1f to %.1f km, %.4f of the crust thicker than Tibet's %.0f"
+                    .format(Locale.ROOT, seed, thinnest, thickest, share, tibetKm)
+            )
+            assertEquals("seed $seed: continental points thinner than ocean floor that were never stretched", 0, thinUnstretched)
+            assertTrue("seed $seed: $share of the crust is thicker than Tibet's", share <= EARTH_LAND_ABOVE_FOUR_KM_SHARE)
+        }
     }
 
     private companion object {
-        /** Millimeters in a kilometer, to turn a drift asked for in kilometers into a speed. */
-        const val MILLIMETERS_PER_KM = 1e6
+        /** The standard seeds the rest of the suite reads, plus the author's own world. */
+        val SEEDS = SharedWorlds.STANDARD_SEEDS + 718106L
 
-        /** The shipped setting, so the guard measures the world the app builds. */
-        const val DEFAULT_EPOCHS = 3
+        private val histories = HashMap<Long, CrustHistory>()
 
-        /**
-         * How far from a present boundary an old belt's crest has to stand to count as a scar
-         * rather than as the modern belt beside it.
-         *
-         * Stated as twice `boundaryFalloffKm` (26 cell widths at 512), which is where the present
-         * epoch's own uplift has fallen to nothing on every profile the stage builds — so a crest
-         * beyond it cannot be a present belt under another name. On a 12,000 km world at 512 that is
-         * about 1,200 km; the Appalachian front stands some 2,000 km from the Mid-Atlantic ridge.
-         *
-         * In kilometers since Q2, 1,218.75, the 52 cell widths it was stated as on the 512 by 512
-         * grid; a count of cells would have halved it on square cells, where the control below then
-         * reads 0.10 on seed 7. On the ground in every direction since the boundary distance was
-         * measured on the ground; until then a crest 52 rows north of a boundary counted as 52 when
-         * it stood 26 cell widths off. The control below is what says the figure is still the right
-         * one: at 512 by 512 three epochs that never moved read 0.0036, 0.0011 and 0.0060 of the
-         * field beyond it on the three seeds, under the bar, and 0.016, 0.015 and 0.033 beyond 914
-         * km, the last over it.
-         */
-        const val MIN_INLAND_KM = 1_218.75f
+        fun configOf(seed: Long): WorldGenConfig = WorldGenConfig.forRows(seed, SharedWorlds.DETAIL_ROWS)
 
-        /** The Appalachians against the Alps: roughly 2,000 m against 4,500. */
-        const val MIN_LOWER = 1.8f
-
-        /** An old orogen spreads as it falls; a modest bar, since the blur is the mechanism. */
-        const val MIN_BROADER = 1.3f
+        @Synchronized
+        fun historyOf(seed: Long): CrustHistory = histories.getOrPut(seed) { TectonicHistory.run(configOf(seed)) }
 
         /**
-         * Lower than this and it is a swell, not a range — as a share of the height field, which
-         * since S2 is an absolute altitude, so it is a figure in metres.
-         *
-         * Five hundred metres of `WorldScale.reliefSpanMetres`. Earth's worn orogens are the
-         * derivation: the Urals stand 500 to 1,000 m above the plains either side of them and the
-         * Appalachian province 500 to 1,500, and below that a Palaeozoic collision has stopped
-         * being high ground at all. It was 0.04 of a field that had been renormalised, which came
-         * to nothing in particular; the same 0.04 is 640 m on the declared ruler and would refuse
-         * the Urals.
+         * How far a budget's closing may sit from its count, as a share of the start: a sample's
+         * thickness is single precision, 6e-8 of itself, and a history changes it a dozen times
+         * or so; the area is counted in whole samples and closes to the double's own rounding.
          */
-        const val MIN_BELT_PEAK = 500f / 16_000f
+        const val CLOSING_TOLERANCE = 1e-6
+
+        /** Bradley 2008: the length of Earth's passive margins today. */
+        const val EARTH_PASSIVE_MARGIN_KM = 105_000.0
+
+        /** Earth's continental crust, as a share of the sphere: the design's 0.41 (decisions 1). */
+        const val EARTH_CONTINENTAL_CRUST_SHARE = 0.41
+        const val EARTH_SURFACE_KM2 = 510.1e6
+
+        /** The net bar in Earth's own gains from its rifted margins: see the clause. */
+        const val NET_BAR_IN_EARTH_GAINS = 2.0
+
+        const val FEWEST_PLATES = 12
+
+        /**
+         * Earth's Pacific's 0.205 and the five hundredths of the sphere a world's largest plate may
+         * stand above it while a split through its floor is still being looked for (the history
+         * looks again every few steps): the design's bar.
+         */
+        const val LARGEST_PLATE_SHARE = 0.25
+
+        /** How far from a ridge's axis a point still reads as the ridge: a neighbor's reach (`FibonacciSphere`). */
+        const val RIDGE_REACH_SPACINGS = 1.6
+
+        const val AGE_BIN_MYR = 60.0
+        const val AGE_BINS = 3
+
+        const val EARTH_LAND_ABOVE_FOUR_KM_SHARE = 0.020
+
+        /** Zahirovic et al.'s sorting of plates: over half continental, under a quarter, and more than a fifth of the edge subducting. */
+        const val CONTINENTAL_PLATE_SHARE = 0.5f
+        const val OCEANIC_PLATE_SHARE = 0.25f
+        const val SLAB_BOUNDED_EDGE_SHARE = 0.2f
+
+        /** Midway between Earth's 28 mm a year and the 8 of basal drag alone, and midway from 28 to the fastest plates' 85: see the clause. */
+        const val CONTINENTAL_SPEED_LOW_BAR = 18.0
+        const val CONTINENTAL_SPEED_HIGH_BAR = 56.5
     }
 }

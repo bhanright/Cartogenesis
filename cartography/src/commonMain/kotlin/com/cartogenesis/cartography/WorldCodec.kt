@@ -31,9 +31,9 @@ data class WorldLists(
      */
     val shorelineHeight: Float,
     /**
-     * How fast this world's ridges spread, in kilometres per million years — solved from the plate
-     * partition rather than declared, and so not derivable from the arrays either. See
-     * [com.cartogenesis.worldgen.pipeline.PlateStage.seafloorAgeOf].
+     * How fast this world's ridges spread, in kilometres per million years — the tectonic history's
+     * own rate at its present ridges rather than a declared one, and so not derivable from the
+     * arrays either. See [com.cartogenesis.worldgen.pipeline.PlateResult.seafloorHalfSpreadingRateKmPerMyr].
      */
     val seafloorHalfSpreadingRateKmPerMyr: Double,
     val landCellCount: Int,
@@ -129,6 +129,26 @@ object WorldCodec {
 
     /**
      * The only version this build reads or writes.
+     *
+     * 28 because the mountains are made from the tectonic history (docs/DESIGN_LEDGER.md, TH1-2):
+     * the plates gained `plates.rockErodibility` and the belts' window books the erosion replays,
+     * `plates.windowTectonicKm`, `plates.windowWearKm` and `plates.windowOnsetMyrAgo`; the settings
+     * gained `tectonics.exposureWindowMyr` and lost the stamped belts' heights
+     * (`tectonics.andeanHeight`, `arcHeight`, `collisionHeight`, `plateauFlatShare`,
+     * `plateauRimHeight`, `plateauRimShare`) and `elevationLimitKneeMetres`. A format-27 file's
+     * erosion would be redone with no rock and no window under it.
+     *
+     * 27 because the crust is made by a tectonic history (docs/DESIGN_LEDGER.md, TH1-1).
+     * `plates.crustAge`, a band of 0 to 1 counted in epochs, is gone and `plates.crustAgeMyr`, a
+     * real age, stands in its place, beside `plates.crustThicknessKm`, `plates.orogenicExcessKm`,
+     * `plates.orogenyKind`, `plates.terraneId` and `plates.riftAgeMyr`; a plate gained its Euler pole
+     * and rate; and the settings lost the epochs (`tectonics.historyEpochs`,
+     * `plateSpeedMmPerYear`, `epochLengthYears`, `beltAgeWidening`, `beltAgeBlurKm`,
+     * `failedRiftFill`, `failedRiftShoulder`, `crustMarginKm`, `isostasy.cratonThickeningKm`,
+     * `isostasy.oceanicMeanFloorMetres`, `isostasy.seafloorAge`) and gained the history's
+     * (`tectonics.historyCellKm`, `historyStepMyr`, `historyLengthMyr`, `assembledShareOfCycle`,
+     * `medianPlateSpeedMmPerYear`, `slabPulledPlateSpeedMmPerYear`, `riftedMarginWidthKm`). A
+     * format-26 file's crust age would be read as a time of a fraction of a million years.
      *
      * 26 because the climate keeps its annual surface wind unclamped, `climate.windEastwardMps`
      * and `climate.windSouthwardMps`, which the satellite style lays its streaks along: a
@@ -315,7 +335,7 @@ object WorldCodec {
      * every cell-valued name took a `Cells` suffix. 3 was the container below with none of that, 2
      * the JSON text that preceded it; none of them opens.
      */
-    const val FORMAT_VERSION = 26
+    const val FORMAT_VERSION = 28
 
     private val MAGIC = byteArrayOf('C'.code.toByte(), 'G'.code.toByte(), 'W'.code.toByte(), 'D'.code.toByte())
 

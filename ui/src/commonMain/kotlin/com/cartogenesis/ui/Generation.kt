@@ -5,6 +5,7 @@ import com.cartogenesis.worldgen.WorldGenerationEngine
 import com.cartogenesis.worldgen.model.PartialWorld
 import com.cartogenesis.worldgen.model.WorldGenConfig
 import com.cartogenesis.worldgen.model.WorldMap
+import com.cartogenesis.worldgen.pipeline.CrustMapAccelerator
 import com.cartogenesis.worldgen.pipeline.ErosionAccelerator
 import com.cartogenesis.worldgen.pipeline.IceSheetAccelerator
 import com.cartogenesis.worldgen.pipeline.MoistureAccelerator
@@ -53,8 +54,9 @@ internal object Generation {
      * [previous] is the world already on screen, so the engine can skip whatever the settings did
      * not change; [accelerator] is the graphics device, or the terrain a version-2 save carried;
      * [oceanAccelerator] is the same device again, for the stream-function solve,
-     * [iceAccelerator] the same device once more, for the ice sheet's profile and its flow, and
-     * [moistureAccelerator] the same again for the climate's rain.
+     * [iceAccelerator] the same device once more, for the ice sheet's profile and its flow,
+     * [moistureAccelerator] the same again for the climate's rain, and [crustAccelerator] for
+     * reading the tectonic history's crust onto the map.
      */
     suspend fun run(
         config: WorldGenConfig,
@@ -63,11 +65,12 @@ internal object Generation {
         oceanAccelerator: OceanAccelerator?,
         iceAccelerator: IceSheetAccelerator? = null,
         moistureAccelerator: MoistureAccelerator? = null,
+        crustAccelerator: CrustMapAccelerator? = null,
         onStage: (GenerationStage) -> Unit
     ): WorldMap {
         letTheInterfaceDraw()
         return WorldGenerationEngine.generate(
-            config, previous, accelerator, oceanAccelerator, iceAccelerator, moistureAccelerator
+            config, previous, accelerator, oceanAccelerator, iceAccelerator, moistureAccelerator, crustAccelerator
         ) { stage, _, _ ->
             onStage(stage)
             letTheInterfaceDraw()

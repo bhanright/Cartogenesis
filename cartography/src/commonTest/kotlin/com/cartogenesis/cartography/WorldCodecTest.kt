@@ -202,14 +202,16 @@ class WorldCodecTest {
 
     @Test
     fun `a 4096 world's payload is counted past what an Int holds`() {
-        // 170 bytes a cell at 4096 is 2,852,126,720 bytes of arrays, which wrapped the old Int
+        // 206 bytes a cell at 4096 is 3,456,106,496 bytes of arrays, which wrapped the old Int
         // sum negative (146 until C1b's two evaporation fields, 154 until A1-1's July and January,
-        // 162 until the annual wind was kept for the satellite style).
+        // 162 until the annual wind was kept for the satellite style, 170 until TH1-1's crust: its
+        // thickness, orogenic excess, orogeny, terrane and rift age; 190 until TH1-2's rock
+        // erodibility and the belts' window, three fields).
         // Counted here from the layout itself, so a narrowing anywhere shows.
         val cells = 4096 * 4096
         val directory = WorldSections.directory(cells, listsBytes = 1_000)
         val arrays = directory.drop(1).sumOf { it.bytes }
-        assertEquals(170L * cells, arrays)
+        assertEquals(206L * cells, arrays)
         assertTrue(WorldSections.payloadBytes(directory) > Int.MAX_VALUE)
         assertEquals(directory.last().offset + WorldSections.RECORD_PREFIX_BYTES + directory.last().name.length +
             directory.last().bytes, WorldSections.payloadBytes(directory))
@@ -218,7 +220,7 @@ class WorldCodecTest {
     /**
      * The top of the ladder saves and opens, and a grid past it is refused by both.
      *
-     * 4096 rows of square cells is 8192 by 4096, 33,554,432 cells and 5.2 GB of arrays, which no
+     * 4096 rows of square cells is 8192 by 4096, 33,554,432 cells and 6.9 GB of arrays, which no
      * test can hold, so each path is asked about the grid alone. [WorldCodec.write] refuses a world
      * past the bound before it reads an array of it; a header claiming the top grid, with the
      * directory this build lays out for that many cells, is read from the header alone; and one

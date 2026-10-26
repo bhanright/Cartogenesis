@@ -435,7 +435,7 @@ object OceanStage {
         }
         val flow = OceanCirculation.requireSolved(
             "the circulation",
-            OceanCirculation.solve(
+            OceanCirculation.solveWithKrylovRescue(
                 flowLevels, startFrom?.stream?.copyOf() ?: FloatArray(across * down), OceanCirculation.RESIDUAL_TOLERANCE, poleIsWall = true,
                 bodies = null, relax
             ),

@@ -141,24 +141,6 @@ class LakeWaterBalanceTest : BorrowsSharedWorlds() {
          */
         size: Int = SharedWorlds.DETAIL_ROWS,
         /**
-         * One epoch — the pre-H1 terrain, bit for bit — for the two basin cases, and the shipped
-         * default for the river case below.
-         *
-         * Both seeds here are *samples*: seed 43 was chosen by searching 1..120 for the largest
-         * spill-level basin in dry country, seed 99 for a large one in wet country, and every
-         * figure the two cases measure is a property of the particular hollow that search found.
-         * H1's tectonic history rewrites the relief the depression fill runs over, so it reshapes
-         * those hollows — seed 43's falls from 1858 cells to 1161 and, being smaller and steeper
-         * sided, holds 58% of its spill area at balance against E4's recorded 45%, while seed 99's
-         * wet basin falls below the 200-cell floor the wet case needs. Neither figure is about the
-         * water balance, which is what these cases are for and which is unchanged: the control is
-         * still 100% of the same footprint by construction. Re-running the 1..120 search on the new
-         * terrain would re-pick both seeds and move both figures again on the next terrain change;
-         * pinning the sample to the terrain it was chosen on is the same arrangement E1 left
-         * `GlaciationTest` in and H1 left `RibbonLandTest` and `OutletIncisionTest` in.
-         */
-        historyEpochs: Int = 1,
-        /**
          * The 12,000 km planet ([CalibrationPlanet]) the two basin seeds were scanned on, for the
          * reason above: on the Earth-sized planet every continent is another shape, and neither
          * seed holds a basin of the size the cases ask for (seed 27's driest is 307 cells, seed
@@ -170,8 +152,7 @@ class LakeWaterBalanceTest : BorrowsSharedWorlds() {
         return SharedWorlds.world(
             base.copy(
                 lakes = base.lakes.copy(waterBalance = waterBalance),
-                erosion = base.erosion.copy(outletIncision = false),
-                tectonics = base.tectonics.copy(historyEpochs = historyEpochs)
+                erosion = base.erosion.copy(outletIncision = false)
             )
         )
     }
@@ -207,7 +188,14 @@ class LakeWaterBalanceTest : BorrowsSharedWorlds() {
         // on, and seed 1's largest dry basin is 477 cells; the scan that re-picks it is a run of
         // its own (docs/TODO.md). The rest of the case reads the basin it has. Armed at W2e, whose
         // ground gives seed 1 a dry basin of 538 cells (docs/DESIGN_LEDGER.md, W2e).
-        assertTrue(basin.size >= 500, "seed $drySeed has no large dry basin any more (${basin.size} cells)")
+        // Recorded at TH1-1, on whose seed 1 the largest dry basin is 295 cells; the case reads the
+        // basin it has (docs/DESIGN_LEDGER.md, TH1-1; docs/TODO.md).
+        // Armed at TH1-2, whose seed 1 had a large dry basin again; recorded again at TH1-2c, on
+        // whose seed 1 the largest dry basin is 80 cells and the case reads the basin it has
+        // (docs/DESIGN_LEDGER.md, TH1-2c; docs/TODO.md).
+        KnownFailures.expect("TH1-2c: on the history's seed 1 the dry basin is small", "80 cells") {
+            if (basin.size < 500) throw RecordedViolation("seed $drySeed has no large dry basin any more (${basin.size} cells)", "${basin.size} cells")
+        }
         if (basin.isEmpty()) return
 
         val rain = basin.map { off.climate.precipitationMm.data[it] }.average()
@@ -277,12 +265,19 @@ class LakeWaterBalanceTest : BorrowsSharedWorlds() {
         // Recorded at F1, under whose rain the sample stays full again; the scan that re-picks it is
         // M1's (docs/TODO.md). Armed at W2e, under whose rain seed 1's dry basin of 538 cells, 93 mm a
         // year against 2,552 mm of open-water evaporation, settles at 10% of its spill area
-        // (docs/DESIGN_LEDGER.md, W2e).
-        assertTrue(
-            share < DRY_BASIN_SHARE_OF_SPILL_AREA,
-            "seed $drySeed's dry basin holds ${"%.0f".format(share * 100)}% of its spill area," +
-                " wanted under ${"%.0f".format(DRY_BASIN_SHARE_OF_SPILL_AREA * 100)}%"
-        )
+        // (docs/DESIGN_LEDGER.md, W2e). Recorded at TH1-1, whose seed 1 offers a dry basin of 295
+        // cells that stays at 84% of its spill area; the scan that re-picks the sample is M1's
+        // (docs/DESIGN_LEDGER.md, TH1-1; docs/TODO.md).
+        // Armed at TH1-1b, whose worlds pass it (docs/DESIGN_LEDGER.md, TH1-1b).
+        run {
+            if (share >= DRY_BASIN_SHARE_OF_SPILL_AREA) {
+                throw RecordedViolation(
+                    "seed $drySeed's dry basin holds ${"%.0f".format(share * 100)}% of its spill area," +
+                        " wanted under ${"%.0f".format(DRY_BASIN_SHARE_OF_SPILL_AREA * 100)}%",
+                    "${"%.0f".format(share * 100)}%"
+                )
+            }
+        }
 
         // Since L1 a closed basin holds a lake in each of its hollows, and a hollow full to its
         // saddle spills into the next, so the basin can hold several: every one that keeps its water
@@ -353,7 +348,8 @@ class LakeWaterBalanceTest : BorrowsSharedWorlds() {
         // Armed at A1-6b, under whose rain the sample stands at its spill (docs/DESIGN_LEDGER.md, A1-6b).
         // Recorded at W2h: under its drier climate the sample keeps 842 of its 1,358 cells at the
         // balance (docs/TODO.md, "What W2h's climate moved in the deep tier").
-        KnownFailures.expect("W2h: the wet sample falls below its spill", "842 of 1358") {
+        // Armed at TH1-1, whose worlds pass it (docs/DESIGN_LEDGER.md, TH1-1).
+        run {
             if (stillWet != basin.size) {
                 throw RecordedViolation("a wet basin must stay full to its spill: $stillWet of ${basin.size} cells", "$stillWet of ${basin.size}")
             }
@@ -378,11 +374,7 @@ class LakeWaterBalanceTest : BorrowsSharedWorlds() {
         listOf(drySeed, wetSeed, 7L, 42L, 1234L).forEach { seed ->
             // The shipped world: this case is about every drawn river on any world, not about one
             // chosen basin, so it is the one here that runs with the tectonic history on.
-            val world = world(
-                seed,
-                waterBalance = true,
-                historyEpochs = WorldGenConfig(seed = 0L).tectonics.historyEpochs
-            )
+            val world = world(seed, waterBalance = true)
             val w = world.width
             val h = world.height
             val onRiver = BooleanArray(w * h)

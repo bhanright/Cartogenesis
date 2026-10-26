@@ -72,6 +72,10 @@ compose.resources {
 // other modules' and generate nothing larger than 128 cells, so one processor is what they get.
 tasks.named<Test>("jvmTest") {
     val processors = rootProject.extra["lightTestProcessors"] as Int
+    // The heap is stated because the test worker's default, half a gigabyte, is not what these
+    // cases need: nine of them (worlds of 128 cells, rendered and encoded) ran out of it, and
+    // passed at three. The root build script's budget table counts this figure.
+    maxHeapSize = rootProject.extra["uiTestHeap"] as String
     jvmArgs(
         "-XX:ActiveProcessorCount=$processors",
         "-Djava.util.concurrent.ForkJoinPool.common.parallelism=$processors"

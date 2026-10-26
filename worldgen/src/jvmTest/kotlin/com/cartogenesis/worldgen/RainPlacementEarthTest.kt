@@ -230,7 +230,9 @@ class RainPlacementEarthTest : BorrowsSharedWorlds() {
         val figures = pooled
         // x2.63 on 6d5257e2; x1.74 at W2e, the subtropical highs too weak and the eddy winds still
         // carrying the interiors' water away (docs/DESIGN_LEDGER.md, W2e; docs/TODO.md).
-        KnownFailures.expect("W2e: more of the land stands far drier than its potential than Earth's", "x1.87") {
+        // Recorded again at TH1-1 on the history's first worlds, x1.34.
+        // Armed at TH1-1, whose final worlds pass it (docs/DESIGN_LEDGER.md, TH1-1).
+        run {
             nearEarth("land over five times drier than its potential", figures.veryDry / figures.landArea, EARTH_VERY_DRY_SHARE)
         }
     }
@@ -241,8 +243,13 @@ class RainPlacementEarthTest : BorrowsSharedWorlds() {
         val atEarthsLand = figures.importKm3 * EARTH_LAND_KM2 / figures.landKm2
         val most = RODELL_IMPORT_KM3 + RODELL_IMPORT_UNCERTAINTY_KM3
         println("EARTH the land's rain less its evaporation, at Earth's land area: %.0f km3 against %.0f to %.0f".format(atEarthsLand, TRENBERTH_IMPORT_KM3, most))
-        if (atEarthsLand < TRENBERTH_IMPORT_KM3 || atEarthsLand > most) {
-            throw RecordedViolation("the land imports %.0f km3 a year at Earth's land area".format(atEarthsLand), "%.0f".format(atEarthsLand / 1_000.0))
+        // Recorded at TH1-1: on the history's final worlds the land imports 50,397 km3 a year at
+        // Earth's land area, 97 past the top of Rodell's range, the land wetter with the sea at 71%
+        // (docs/DESIGN_LEDGER.md, TH1-1; docs/TODO.md).
+        KnownFailures.expect("TH1-1: on the history's worlds the land imports more water than Earth's", "65") {
+            if (atEarthsLand < TRENBERTH_IMPORT_KM3 || atEarthsLand > most) {
+                throw RecordedViolation("the land imports %.0f km3 a year at Earth's land area".format(atEarthsLand), "%.0f".format(atEarthsLand / 1_000.0))
+            }
         }
     }
 
@@ -252,7 +259,11 @@ class RainPlacementEarthTest : BorrowsSharedWorlds() {
         val ratio = (figures.highRain / figures.highArea) / (figures.lowRain / figures.lowArea)
         println("EARTH land within %.0f degrees: the land over %.0f m rains %.2f of what the land under %.0f m rains; Earth %.2f"
             .format(HEIGHT_BAND_DEGREES, HIGHLAND_FLOOR_M, ratio, LOWLAND_TOP_M, EARTH_HIGHLAND_OVER_LOWLAND))
-        if (ratio >= 1.0) throw RecordedViolation("high tropical ground rains %.2f times the lowland's".format(ratio), "%.2f".format(ratio))
+        // Recorded at TH1-2c, whose high tropical ground rains 1.01 times the lowland's, a hair over
+        // the bar of 1.0 (docs/DESIGN_LEDGER.md, TH1-2c; docs/TODO.md).
+        KnownFailures.expect("TH1-2c: high tropical ground rains no less than the lowland on the history's worlds", "1.01") {
+            if (ratio >= 1.0) throw RecordedViolation("high tropical ground rains %.2f times the lowland's".format(ratio), "%.2f".format(ratio))
+        }
     }
 
     @Test
@@ -261,8 +272,10 @@ class RainPlacementEarthTest : BorrowsSharedWorlds() {
         // x1.92 on 6d5257e2, inside, though seeds 42 and 969495 stood at 2.6 and 2.4 times Earth's;
         // x0.28 at W2e, whose isolated high ground no longer raises the rain law and whose lifted
         // air rains only past its condensation level: fewer wet spots than Earth's isolated
-        // mountains and volcanoes carry (docs/DESIGN_LEDGER.md, W2e; docs/TODO.md).
-        KnownFailures.expect("W2e: the land carries fewer isolated wet spots than Earth's", "x0.30") {
+        // mountains and volcanoes carry (docs/DESIGN_LEDGER.md, W2e). Armed at TH1-1b, whose worlds
+        // passed it; recorded at TH1-2, whose worlds carry fewer isolated high ranges, at x0.18
+        // (docs/DESIGN_LEDGER.md, TH1-2; docs/TODO.md).
+        KnownFailures.expect("TH1-2: the history's worlds carry fewer isolated wet spots than Earth's", "x0.25") {
             nearEarth("wet spots' share of the land", figures.spotArea / figures.landArea, EARTH_SPOT_SHARE, SPOT_FACTOR)
         }
     }

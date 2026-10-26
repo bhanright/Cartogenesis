@@ -104,6 +104,9 @@ class ColdWaterPlacementTest : BorrowsSharedWorlds() {
         // Armed at A1-6b, whose seasonal circulation's easterly is weakest on the equator itself, so
         // the equatorial tongue no longer reaches the eastern shores colder than the subtropical
         // upwelling; the tongue's own shallowness is the next clause's (docs/DESIGN_LEDGER.md, A1-6b).
+        // Recorded at TH1-1, on whose worlds seed 7's coldest eastern-boundary water lay poleward of
+        // the upwelling latitudes, at 48 degrees; armed at TH1-2, whose worlds pass it
+        // (docs/DESIGN_LEDGER.md, TH1-1 and TH1-2).
         assertTrue(failures.isEmpty(), failures.joinToString("\n"))
     }
 
@@ -126,7 +129,7 @@ class ColdWaterPlacementTest : BorrowsSharedWorlds() {
         }
         // Re-recorded on square cells at Q2, the ocean still solved on its own grid (docs/DESIGN_LEDGER.md, Q2).
         // Re-recorded at L1, whose rifts are Earth's half-grabens and the same at every grid (docs/DESIGN_LEDGER.md, L1).
-        KnownFailures.expect(EQUATORIAL_TONGUE_SHALLOW, "seed 7 0.08 of 1.18 C; seed 42 0.13 of 1.47 C; seed 1234 0.07 of 0.78 C; seed 99 0.09 of 1.26 C") {
+        KnownFailures.expect(EQUATORIAL_TONGUE_SHALLOW, "seed 7 0.14 of 1.27 C; seed 42 0.08 of 0.69 C; seed 1234 0.05 of 0.74 C; seed 99 0.08 of 1.20 C") {
             if (failures.isNotEmpty()) throw RecordedViolation(failures.joinToString("\n"), shortOf.joinToString("; "))
         }
     }

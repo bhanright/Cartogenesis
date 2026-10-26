@@ -123,7 +123,8 @@ class StraightRunTest : BorrowsSharedWorlds() {
         // (rule 13; docs/DESIGN_LEDGER.md, W2d; docs/TODO.md). At W2e seed 7's is gone and seed 42
         // holds one, lake 6, 21 cells at (784,21), 1.06 cells off a line it runs 21.5 cells along, in
         // the frozen north again (rule 13; docs/DESIGN_LEDGER.md, W2e; docs/TODO.md).
-        KnownFailures.expect("W2e: a lake in a frozen north runs along a row", "298405@1024=1 7@512=0 42@512=0 1234@512=0 99@512=0") {
+        // Armed at TH1-1, whose worlds pass it (docs/DESIGN_LEDGER.md, TH1-1).
+        run {
             if (total != 0) {
                 throw RecordedViolation("standing water still runs in ruled lines: ${counted.joinToString(" ")}", counted.joinToString(" "))
             }
